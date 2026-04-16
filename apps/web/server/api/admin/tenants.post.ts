@@ -1,0 +1,38 @@
+import { prisma } from "~/server/utils/prisma";
+import { requireSuperadmin } from "~/server/utils/authz";
+
+function normalizeSlug(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+export default defineEventHandler(async (event) => {
+  await requireSuperadmin(event);
+  const body = await readBody<{ name?: string; slug?: string }>(event);
+
+  const name = body.name?.trim();
+  const slug = normalizeSlug(body.slug ?? "");
+
+  if (!name || name.length < 2) {
+    throw createError({ statusCode: 400, statusMessage: "Name ist erforderlich (min. 2 Zeichen)" });
+  }
+  if (!slug || slug.length < 2) {
+    throw createError({ statusCode: 400, statusMessage: "Slug ist erforderlich (min. 2 Zeichen)" });
+  }
+
+  const tenant = await prisma.tenant.create({
+    data: { name, slug },
+    select: { id: true, name: true, slug: true, createdAt: true },
+  });
+
+  return {
+    id: tenant.id,
+    name: tenant.name,
+    slug: tenant.slug,
+    createdAt: tenant.createdAt.toISOString(),
+  };
+});

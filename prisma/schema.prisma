@@ -1,0 +1,476 @@
+// Avelom / ogama — domain schema (PostgreSQL)
+// Soft delete: deletedAt on domain models; AuditLog append-only without soft delete.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums ---
+
+enum TenantRole {
+  ADMIN
+  STAFF
+  END_CUSTOMER
+}
+
+enum CustomerSource {
+  manual
+  from_appointment
+  from_phone
+  device_integration
+  import
+}
+
+enum AppointmentStatus {
+  draft
+  confirmed
+  completed
+  cancelled
+}
+
+enum AvailabilityExceptionType {
+  vacation
+  sick
+  block
+  extra_open
+}
+
+enum PreferenceSource {
+  explicit_user
+  admin_default
+  learned_correction
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+// --- Core: identity & tenant ---
+
+model Tenant {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  deletedByUser User? @relation("TenantDeletedBy", fields: [deletedByUserId], references: [id])
+
+  memberships          Membership[]
+  customers            Customer[]
+  appointments         Appointment[]
+  resources            Resource[]
+  lessonTypes          LessonType[]
+  teacherProfiles      TeacherProfile[]
+  availabilityRules    AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+  packages             Package[]
+  payments             Payment[]
+  appointmentTemplates AppointmentTemplate[]
+  automationRules      AutomationRule[]
+  userAssistantPreferences UserAssistantPreference[]
+  deviceContactLinks   DeviceContactLink[]
+  customerMergeHistory CustomerMergeHistory[]
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  name      String?
+  /// bcrypt hash; null only for not-yet-onboarded / SSO-only accounts (future)
+  passwordHash String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  /// Superadmin flag; tenant roles live on Membership
+  isSuperadmin Boolean @default(false)
+
+  memberships          Membership[]
+  assistantPreferences UserAssistantPreference[]
+  tenantsDeletedAsUser Tenant[] @relation("TenantDeletedBy")
+}
+
+model Membership {
+  id        String     @id @default(uuid()) @db.Uuid
+  tenantId  String     @db.Uuid
+  userId    String     @db.Uuid
+  role      TenantRole
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  teacherProfile TeacherProfile?
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model TeacherProfile {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  membershipId String    @unique @db.Uuid
+  displayName  String
+  qualifications Json?   // e.g. levels, tags
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  membership Membership @relation(fields: [membershipId], references: [id])
+
+  appointments         Appointment[]
+  availabilityRules    AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+
+  @@index([tenantId])
+}
+
+// --- Customer ---
+
+model Customer {
+  id                     String         @id @default(uuid()) @db.Uuid
+  tenantId               String         @db.Uuid
+  displayName            String
+  customerSource         CustomerSource
+  createdFromAppointmentId String?      @db.Uuid
+  notes                  String?
+  version                Int            @default(1)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  deletedAt              DateTime?
+  deletedByUserId        String?        @db.Uuid
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  phones     CustomerPhone[]
+  addresses  CustomerAddress[]
+  tags       CustomerTag[]
+  appointments Appointment[]
+  deviceLinks  DeviceContactLink[]
+
+  @@index([tenantId])
+  @@index([tenantId, displayName])
+}
+
+model CustomerPhone {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  customerId String    @db.Uuid
+  e164       String?
+  raw        String?
+  isPrimary  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  deletedByUserId String? @db.Uuid
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, e164])
+}
+
+model CustomerAddress {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  customerId String    @db.Uuid
+  line1      String?
+  city       String?
+  postalCode String?
+  country    String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  deletedByUserId String? @db.Uuid
+
+  customer Customer @relation(fields: [customerId], references: [id])
+}
+
+model CustomerTag {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  customerId String    @db.Uuid
+  tag        String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  deletedByUserId String? @db.Uuid
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, tag])
+}
+
+model CustomerMergeHistory {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  survivorId    String   @db.Uuid
+  mergedId      String   @db.Uuid
+  mergedAt      DateTime @default(now())
+  mergedByUserId String  @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+// --- Scheduling ---
+
+model Resource {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  name      String
+  capacity  Int       @default(1)
+  metadata  Json?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  appointments Appointment[]
+
+  @@index([tenantId])
+}
+
+model LessonType {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  name      String
+  defaultDurationMin Int?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  appointments Appointment[]
+
+  @@index([tenantId])
+}
+
+model Appointment {
+  id                    String            @id @default(uuid()) @db.Uuid
+  tenantId              String            @db.Uuid
+  startsAt              DateTime
+  endsAt                DateTime
+  status                AppointmentStatus @default(draft)
+  lessonTypeId          String?           @db.Uuid
+  teacherId             String?           @db.Uuid
+  resourceId            String?           @db.Uuid
+  customerId            String?           @db.Uuid
+  appointmentContactText String?
+  appointmentPhoneRaw   String?
+  appointmentPhoneE164  String?
+  unstructuredNote      String?
+  parseSnapshot         Json?
+  version               Int               @default(1)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  deletedAt             DateTime?
+  deletedByUserId       String?           @db.Uuid
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id])
+  lessonType LessonType?     @relation(fields: [lessonTypeId], references: [id])
+  teacher    TeacherProfile? @relation(fields: [teacherId], references: [id])
+  resource   Resource?       @relation(fields: [resourceId], references: [id])
+  customer   Customer?       @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, startsAt])
+  @@index([tenantId, teacherId, startsAt])
+}
+
+model AvailabilityRule {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  teacherId   String    @db.Uuid
+  weekday     Int       // 0 = Sunday .. 6 = Saturday (align with JS Date)
+  startTime   String    // "HH:mm" local business logic
+  endTime     String
+  locationId  String?   @db.Uuid
+  activityTags Json?
+  priority    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id])
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id])
+
+  @@index([tenantId, teacherId])
+}
+
+model AvailabilityException {
+  id        String                   @id @default(uuid()) @db.Uuid
+  tenantId  String                   @db.Uuid
+  teacherId String                   @db.Uuid
+  type      AvailabilityExceptionType
+  startsOn  DateTime                 @db.Date
+  endsOn    DateTime                 @db.Date
+  reason    String?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id])
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id])
+
+  @@index([tenantId, teacherId, startsOn, endsOn])
+}
+
+// --- Commercial ---
+
+model Package {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  name      String
+  metadata  Json?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  payments Payment[]
+
+  @@index([tenantId])
+}
+
+model Payment {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @db.Uuid
+  packageId String?       @db.Uuid
+  amountCents Int
+  currency  String        @default("EUR")
+  status    PaymentStatus @default(pending)
+  metadata  Json?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  package Package? @relation(fields: [packageId], references: [id])
+
+  @@index([tenantId])
+}
+
+// --- Assistant & automation ---
+
+model UserAssistantPreference {
+  id                      String           @id @default(uuid()) @db.Uuid
+  tenantId                String           @db.Uuid
+  userId                  String           @db.Uuid
+  key                     String
+  value                   Json
+  source                  PreferenceSource
+  learnedFromInteractionId String?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  deletedAt               DateTime?
+  deletedByUserId         String?          @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, userId, key])
+  @@index([tenantId, userId])
+}
+
+model AppointmentTemplate {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  userId    String?   @db.Uuid // null = tenant-wide template
+  label     String
+  payload   Json
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+model AutomationRule {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  name      String
+  trigger   Json
+  conditions Json?
+  actions   Json
+  enabled   Boolean   @default(true)
+  priority  Int       @default(0)
+  lastRunAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  runs   AutomationRun[]
+
+  @@index([tenantId, enabled])
+}
+
+model AutomationRun {
+  id         String   @id @default(uuid()) @db.Uuid
+  ruleId     String   @db.Uuid
+  runAt      DateTime @default(now())
+  result     Json?
+  error      String?
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id])
+
+  @@index([ruleId])
+}
+
+// --- Device link ---
+
+model DeviceContactLink {
+  id               String    @id @default(uuid()) @db.Uuid
+  tenantId         String    @db.Uuid
+  customerId       String    @db.Uuid
+  platform         String
+  deviceContactId  String
+  syncStatus       String
+  lastSyncedAt     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+  deletedByUserId  String?   @db.Uuid
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([tenantId, customerId, platform, deviceContactId])
+}
+
+// --- Audit (no soft delete) ---
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String?  @db.Uuid
+  actorUserId String? @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}

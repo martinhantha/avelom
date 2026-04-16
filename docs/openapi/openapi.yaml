@@ -1,0 +1,904 @@
+openapi: 3.1.0
+info:
+  title: Avelom API
+  version: 0.1.0
+  description: |
+    MVP HTTP API (tenant-scoped). Tenant wird aus Token/Middleware abgeleitet;
+    `tenantId` in Pfaden ist optional — wenn genutzt, muss es mit dem Kontext übereinstimmen.
+
+servers:
+  - url: https://app.example.com/api/v1
+    description: Production (Nuxt Nitro)
+  - url: http://localhost:3000/api/v1
+    description: Local (pnpm dev:web)
+
+tags:
+  - name: Auth
+  - name: Appointments
+  - name: Availability
+  - name: Customers
+  - name: Sync
+  - name: Assistant
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login (email/password or magic link exchange — implementierungsabhängig)
+      operationId: authLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      operationId: authRefresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user and tenant memberships
+      operationId: authMe
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /tenants/{tenantId}/appointments:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      tags: [Appointments]
+      summary: List appointments
+      operationId: listAppointments
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: teacherId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Appointment"
+    post:
+      tags: [Appointments]
+      summary: Create appointment
+      operationId: createAppointment
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentCreate"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /tenants/{tenantId}/appointments/{appointmentId}:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - $ref: "#/components/parameters/AppointmentId"
+    get:
+      tags: [Appointments]
+      operationId: getAppointment
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+    patch:
+      tags: [Appointments]
+      operationId: patchAppointment
+      parameters:
+        - name: If-Match
+          in: header
+          schema:
+            type: integer
+          description: Optimistic concurrency (version)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentPatch"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+        "409":
+          $ref: "#/components/responses/VersionConflict"
+    delete:
+      tags: [Appointments]
+      summary: Soft-delete appointment
+      operationId: deleteAppointment
+      responses:
+        "204":
+          description: No content
+
+  /tenants/{tenantId}/teachers/{teacherId}/availability/rules:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - name: teacherId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Availability]
+      operationId: listAvailabilityRules
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvailabilityRule"
+    post:
+      tags: [Availability]
+      operationId: createAvailabilityRule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityRuleCreate"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityRule"
+
+  /tenants/{tenantId}/teachers/{teacherId}/availability/exceptions:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - name: teacherId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Availability]
+      operationId: listAvailabilityExceptions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvailabilityException"
+    post:
+      tags: [Availability]
+      operationId: createAvailabilityException
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityExceptionCreate"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityException"
+
+  /tenants/{tenantId}/customers:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      tags: [Customers]
+      operationId: listCustomers
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search / fuzzy prefix
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Customer"
+    post:
+      tags: [Customers]
+      operationId: createCustomer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerCreate"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /tenants/{tenantId}/customers/{customerId}:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Customers]
+      operationId: getCustomer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    patch:
+      tags: [Customers]
+      operationId: patchCustomer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPatch"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    delete:
+      tags: [Customers]
+      operationId: deleteCustomer
+      responses:
+        "204":
+          description: No content
+
+  /tenants/{tenantId}/sync/push:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    post:
+      tags: [Sync]
+      summary: Push offline outbox operations
+      operationId: syncPush
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncPushRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncPushResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /tenants/{tenantId}/sync/pull:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      tags: [Sync]
+      summary: Pull changes since cursor
+      operationId: syncPull
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+          description: Opaque cursor / ISO timestamp
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncPullResponse"
+
+  /tenants/{tenantId}/assistant/parse-intent:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    post:
+      tags: [Assistant]
+      summary: Parse natural language / quick capture
+      operationId: assistantParseIntent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                locale:
+                  type: string
+                  default: de-DE
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParseIntentResponse"
+
+  /tenants/{tenantId}/users/me/assistant-preferences:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      tags: [Assistant]
+      operationId: getAssistantPreferences
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AssistantPreference"
+    patch:
+      tags: [Assistant]
+      operationId: patchAssistantPreferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                preferences:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/AssistantPreferenceUpsert"
+      responses:
+        "200":
+          description: Updated
+
+components:
+  parameters:
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AppointmentId:
+      name: appointmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Client-generated UUID for safe retries (offline / flaky networks)
+
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Conflict:
+      description: Business conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    VersionConflict:
+      description: Optimistic concurrency failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+
+  schemas:
+    AuthTokens:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+
+    AuthUser:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          nullable: true
+        isSuperadmin:
+          type: boolean
+
+    AuthMembership:
+      type: object
+      required: [tenantId, tenantName, tenantSlug, role]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        tenantName:
+          type: string
+        tenantSlug:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, STAFF, END_CUSTOMER]
+
+    AuthSession:
+      type: object
+      required: [user, memberships]
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        memberships:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthMembership"
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - VALIDATION_ERROR
+            - CONFLICT
+            - OUTDATED_VERSION
+            - NOT_FOUND
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [draft, confirmed, completed, cancelled]
+        lessonTypeId:
+          type: string
+          format: uuid
+          nullable: true
+        teacherId:
+          type: string
+          format: uuid
+          nullable: true
+        resourceId:
+          type: string
+          format: uuid
+          nullable: true
+        customerId:
+          type: string
+          format: uuid
+          nullable: true
+        appointmentContactText:
+          type: string
+          nullable: true
+        appointmentPhoneE164:
+          type: string
+          nullable: true
+        version:
+          type: integer
+
+    AppointmentCreate:
+      type: object
+      required: [startsAt, endsAt]
+      properties:
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+        lessonTypeId:
+          type: string
+          format: uuid
+        teacherId:
+          type: string
+          format: uuid
+        resourceId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        appointmentContactText:
+          type: string
+        appointmentPhoneRaw:
+          type: string
+        appointmentPhoneE164:
+          type: string
+        unstructuredNote:
+          type: string
+
+    AppointmentPatch:
+      type: object
+      properties:
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+        teacherId:
+          type: string
+          format: uuid
+        resourceId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        appointmentContactText:
+          type: string
+
+    AvailabilityRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        weekday:
+          type: integer
+        startTime:
+          type: string
+        endTime:
+          type: string
+        locationId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          type: integer
+
+    AvailabilityRuleCreate:
+      type: object
+      required: [weekday, startTime, endTime]
+      properties:
+        weekday:
+          type: integer
+        startTime:
+          type: string
+        endTime:
+          type: string
+        locationId:
+          type: string
+          format: uuid
+        activityTags:
+          type: array
+          items:
+            type: string
+        priority:
+          type: integer
+
+    AvailabilityException:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [vacation, sick, block, extra_open]
+        startsOn:
+          type: string
+          format: date
+        endsOn:
+          type: string
+          format: date
+        reason:
+          type: string
+          nullable: true
+
+    AvailabilityExceptionCreate:
+      type: object
+      required: [type, startsOn, endsOn]
+      properties:
+        type:
+          type: string
+          enum: [vacation, sick, block, extra_open]
+        startsOn:
+          type: string
+          format: date
+        endsOn:
+          type: string
+          format: date
+        reason:
+          type: string
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        customerSource:
+          type: string
+        version:
+          type: integer
+
+    CustomerCreate:
+      type: object
+      required: [displayName, customerSource]
+      properties:
+        displayName:
+          type: string
+        customerSource:
+          type: string
+        notes:
+          type: string
+        phones:
+          type: array
+          items:
+            type: object
+            properties:
+              e164:
+                type: string
+              raw:
+                type: string
+
+    CustomerPatch:
+      type: object
+      properties:
+        displayName:
+          type: string
+        notes:
+          type: string
+
+    SyncPushRequest:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncOperation"
+
+    SyncOperation:
+      type: object
+      required: [opId, type, payload]
+      properties:
+        opId:
+          type: string
+          description: Client-generated unique id per outbox row
+        type:
+          type: string
+          enum: [APPOINTMENT_CREATE, APPOINTMENT_PATCH, APPOINTMENT_DELETE]
+        payload:
+          type: object
+          additionalProperties: true
+        baseVersion:
+          type: integer
+          description: For patches — expected server version
+
+    SyncPushResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              opId:
+                type: string
+              status:
+                type: string
+                enum: [applied, duplicate, conflict, rejected]
+              serverEntity:
+                type: object
+                additionalProperties: true
+              error:
+                $ref: "#/components/schemas/ApiError"
+
+    SyncPullResponse:
+      type: object
+      properties:
+        cursor:
+          type: string
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              entityType:
+                type: string
+              entityId:
+                type: string
+                format: uuid
+              changeType:
+                type: string
+                enum: [upsert, delete]
+              data:
+                type: object
+                additionalProperties: true
+
+    ParseIntentResponse:
+      type: object
+      properties:
+        parsed:
+          type: object
+          additionalProperties: true
+        fieldConfidence:
+          type: object
+          additionalProperties:
+            type: number
+        clarifyingQuestions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              prompt:
+                type: string
+              options:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    value:
+                      type: string
+                    label:
+                      type: string
+        suggestedDefaults:
+          type: object
+          additionalProperties: true
+
+    AssistantPreference:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        source:
+          type: string
+          enum: [explicit_user, admin_default, learned_correction]
+
+    AssistantPreferenceUpsert:
+      type: object
+      required: [key, value, source]
+      properties:
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        source:
+          type: string
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

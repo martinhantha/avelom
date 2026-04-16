@@ -1,0 +1,39 @@
+export default defineNuxtConfig({
+  modules: ["@nuxt/ui"],
+  css: ["~/assets/css/main.css"],
+  devtools: { enabled: true },
+  compatibilityDate: "2025-04-01",
+  runtimeConfig: {
+    /** HttpOnly-Session-Cookie (nur Server) */
+    authCookie: process.env.AUTH_COOKIE_NAME ?? "avelom_at",
+    public: {
+      demoEmail: process.env.NUXT_PUBLIC_DEMO_EMAIL ?? "demo@avelom.local",
+    },
+  },
+  nitro: {
+    rollupConfig: {
+      external: ["@prisma/client", ".prisma/client"],
+    },
+  },
+  vite: {
+    resolve: {
+      dedupe: [
+        "vue",
+        "@vue/runtime-core",
+        "@vue/runtime-dom",
+        "@vue/server-renderer",
+        "@vue/shared",
+      ],
+    },
+  },
+  // Reka (Nuxt UI) als CJS aus node_modules lädt sonst ein anderes @vue/runtime-core als der SSR-Bundle.
+  ssr: {
+    noExternal: ["reka-ui", "vaul-vue"],
+  },
+  app: {
+    head: {
+      title: "Avelom",
+      meta: [{ name: "description", content: "Avelom — Prototyp Schnellerfassung & Planung" }],
+    },
+  },
+});

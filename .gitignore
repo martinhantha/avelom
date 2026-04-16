@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+.output/
+.nuxt/
+*.log
+.DS_Store
+coverage/
+prisma/migrations/**/migration_lock.toml

@@ -1,0 +1,51 @@
+import type { AuthSession } from "~/types/auth";
+
+export function useAuth() {
+  const session = useState<AuthSession | null>("auth:session", () => null);
+
+  const user = computed(() => session.value?.user ?? null);
+  const memberships = computed(() => session.value?.memberships ?? []);
+  const primaryTenant = computed(() => memberships.value[0] ?? null);
+
+  async function refreshSession() {
+    try {
+      const headers: Record<string, string> = {};
+      if (import.meta.server) {
+        const cookie = useRequestHeaders(["cookie"]).cookie;
+        if (cookie) headers.cookie = cookie;
+      }
+      session.value = await $fetch<AuthSession>("/api/auth/me", {
+        headers: Object.keys(headers).length ? headers : undefined,
+        credentials: "include",
+      });
+    } catch {
+      session.value = null;
+    }
+    return session.value;
+  }
+
+  async function login(email: string, password: string) {
+    session.value = await $fetch<AuthSession>("/api/auth/login", {
+      method: "POST",
+      body: { email, password },
+      credentials: "include",
+    });
+    return session.value;
+  }
+
+  async function logout() {
+    await $fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    session.value = null;
+    await navigateTo("/login");
+  }
+
+  return {
+    session,
+    user,
+    memberships,
+    primaryTenant,
+    login,
+    logout,
+    refreshSession,
+  };
+}
