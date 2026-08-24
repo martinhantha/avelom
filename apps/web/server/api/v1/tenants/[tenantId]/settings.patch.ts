@@ -1,0 +1,108 @@
+import { getRouterParam, readBody } from "h3";
+import { prisma } from "~/server/utils/prisma";
+import { assertUuid, requireTenantAccess } from "~/server/utils/authz";
+import { throwValidation } from "~/server/utils/api-errors";
+
+const TENANT_SETTINGS_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  useDefaultDuration: true,
+  defaultTeacherId: true,
+  defaultLessonTypeId: true,
+  teacherLabel: true,
+  resourcesEnabled: true,
+} as const;
+
+function normalizeTeacherLabel(value: unknown): string {
+  if (typeof value !== "string") {
+    throwValidation("Bezeichnung ist erforderlich", { field: "teacherLabel" });
+  }
+  const label = value.trim();
+  if (!label || label.length > 40) {
+    throwValidation("Bezeichnung muss 1–40 Zeichen haben", { field: "teacherLabel" });
+  }
+  return label;
+}
+
+export default defineEventHandler(async (event) => {
+  const access = await requireTenantAccess(event, getRouterParam(event, "tenantId"), ["ADMIN"]);
+  const body =
+    (await readBody<{
+      useDefaultDuration?: boolean;
+      defaultTeacherId?: string | null;
+      defaultLessonTypeId?: string | null;
+      teacherLabel?: string;
+      resourcesEnabled?: boolean;
+    }>(event)) ?? {};
+
+  const data: {
+    useDefaultDuration?: boolean;
+    defaultTeacherId?: string | null;
+    defaultLessonTypeId?: string | null;
+    teacherLabel?: string;
+    resourcesEnabled?: boolean;
+  } = {};
+  if (typeof body.useDefaultDuration === "boolean") {
+    data.useDefaultDuration = body.useDefaultDuration;
+  }
+  if (typeof body.resourcesEnabled === "boolean") {
+    data.resourcesEnabled = body.resourcesEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "teacherLabel")) {
+    data.teacherLabel = normalizeTeacherLabel(body.teacherLabel);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "defaultTeacherId")) {
+    if (body.defaultTeacherId === null || body.defaultTeacherId === "") {
+      data.defaultTeacherId = null;
+    } else if (typeof body.defaultTeacherId === "string") {
+      const teacherId = assertUuid(body.defaultTeacherId, "defaultTeacherId");
+      const teacher = await prisma.teacherProfile.findFirst({
+        where: {
+          id: teacherId,
+          tenantId: access.tenant.id,
+          deletedAt: null,
+          membership: { deletedAt: null },
+        },
+        select: { id: true },
+      });
+      if (!teacher) {
+        throwValidation("Lehrer nicht gefunden", { field: "defaultTeacherId" });
+      }
+      data.defaultTeacherId = teacher.id;
+    } else {
+      throwValidation("defaultTeacherId ist ungültig", { field: "defaultTeacherId" });
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "defaultLessonTypeId")) {
+    if (body.defaultLessonTypeId === null || body.defaultLessonTypeId === "") {
+      data.defaultLessonTypeId = null;
+    } else if (typeof body.defaultLessonTypeId === "string") {
+      const lessonTypeId = assertUuid(body.defaultLessonTypeId, "defaultLessonTypeId");
+      const lessonType = await prisma.lessonType.findFirst({
+        where: {
+          id: lessonTypeId,
+          tenantId: access.tenant.id,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!lessonType) {
+        throwValidation("Terminart nicht gefunden", { field: "defaultLessonTypeId" });
+      }
+      data.defaultLessonTypeId = lessonType.id;
+    } else {
+      throwValidation("defaultLessonTypeId ist ungültig", { field: "defaultLessonTypeId" });
+    }
+  }
+
+  if (!Object.keys(data).length) {
+    throwValidation("Keine Änderungen übermittelt");
+  }
+
+  return prisma.tenant.update({
+    where: { id: access.tenant.id },
+    data,
+    select: TENANT_SETTINGS_SELECT,
+  });
+});

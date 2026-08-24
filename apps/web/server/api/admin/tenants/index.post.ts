@@ -12,7 +12,7 @@ function normalizeSlug(input: string): string {
 
 export default defineEventHandler(async (event) => {
   await requireSuperadmin(event);
-  const body = await readBody<{ name?: string; slug?: string }>(event);
+  const body = await readBody<{ name?: string; slug?: string; useDefaultDuration?: boolean }>(event);
 
   const name = body.name?.trim();
   const slug = normalizeSlug(body.slug ?? "");
@@ -25,14 +25,19 @@ export default defineEventHandler(async (event) => {
   }
 
   const tenant = await prisma.tenant.create({
-    data: { name, slug },
-    select: { id: true, name: true, slug: true, createdAt: true },
+    data: {
+      name,
+      slug,
+      useDefaultDuration: typeof body.useDefaultDuration === "boolean" ? body.useDefaultDuration : true,
+    },
+    select: { id: true, name: true, slug: true, useDefaultDuration: true, createdAt: true },
   });
 
   return {
     id: tenant.id,
     name: tenant.name,
     slug: tenant.slug,
+    useDefaultDuration: tenant.useDefaultDuration,
     createdAt: tenant.createdAt.toISOString(),
   };
 });

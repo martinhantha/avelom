@@ -1,16 +1,32 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
 import { useAuth } from "../composables/useAuth";
 import type { SuperadminOverview, TenantRole } from "../types/superadmin";
 
-const { user, primaryTenant } = useAuth();
+interface AppointmentListItem {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  status: string;
+  appointmentContactText: string | null;
+  teacher: { id: string; displayName: string } | null;
+  resource: { id: string; name: string } | null;
+  lessonType: { id: string; name: string } | null;
+  customer: { id: string; displayName: string } | null;
+}
+
+const { user, primaryTenant, teacherLabel, resourcesEnabled } = useAuth();
 const isSuperadmin = computed(() => Boolean(user.value?.isSuperadmin));
 
 const overview = ref<SuperadminOverview | null>(null);
 const saLoading = ref(false);
 const saError = ref("");
 const saInfo = ref("");
+const appointments = ref<AppointmentListItem[]>([]);
+const appointmentsLoading = ref(false);
+const appointmentsError = ref("");
+const selectedDateKey = ref("");
 
 const tenantForm = reactive({ name: "", slug: "" });
 const userForm = reactive({
@@ -43,6 +59,96 @@ function setInfo(msg: string) {
 function setError(msg: string) {
   saError.value = msg;
   saInfo.value = "";
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("de-DE", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatDayLabel(value: Date) {
+  return new Intl.DateTimeFormat("de-DE", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(value);
+}
+
+function toDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const day = `${value.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateKeyFromIso(value: string) {
+  return toDateKey(new Date(value));
+}
+
+function appointmentTitle(appointment: AppointmentListItem) {
+  return appointment.customer?.displayName || appointment.appointmentContactText || "Termin ohne Kontakt";
+}
+
+const upcomingCount = computed(() => appointments.value.length);
+const todayCount = computed(() => {
+  const today = toDateKey(new Date());
+  return appointments.value.filter((appointment) => dateKeyFromIso(appointment.startsAt) === today).length;
+});
+const calendarDays = computed(() => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: 14 }).map((_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index);
+    const key = toDateKey(date);
+    return {
+      key,
+      label: formatDayLabel(date),
+      count: appointments.value.filter((appointment) => dateKeyFromIso(appointment.startsAt) === key).length,
+      isToday: index === 0,
+    };
+  });
+});
+const selectedDateAppointments = computed(() =>
+  appointments.value.filter((appointment) => dateKeyFromIso(appointment.startsAt) === selectedDateKey.value),
+);
+
+async function loadAppointments() {
+  if (!primaryTenant.value) {
+    appointments.value = [];
+    return;
+  }
+  appointmentsLoading.value = true;
+  appointmentsError.value = "";
+  const from = new Date();
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  to.setDate(to.getDate() + 7);
+  try {
+    const response = await $fetch<{ data: AppointmentListItem[] }>(
+      `/api/v1/tenants/${primaryTenant.value.tenantId}/appointments`,
+      {
+        credentials: "include",
+        query: {
+          from: from.toISOString(),
+          to: to.toISOString(),
+          sort: "asc",
+        },
+      },
+    );
+    appointments.value = response.data;
+  } catch (e: unknown) {
+    const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
+    appointmentsError.value =
+      err.data?.data?.message || err.data?.message || err.statusMessage || "Termine konnten nicht geladen werden";
+  } finally {
+    appointmentsLoading.value = false;
+  }
 }
 
 async function loadOverview() {
@@ -155,19 +261,28 @@ async function updateUser() {
 }
 
 onMounted(() => {
+  selectedDateKey.value = toDateKey(new Date());
   if (isSuperadmin.value) {
     loadOverview();
   }
+  loadAppointments();
 });
+
+watch(
+  () => primaryTenant.value?.tenantId,
+  () => {
+    loadAppointments();
+  },
+);
 </script>
 
 <template>
   <UContainer class="py-8 space-y-6">
     <div class="space-y-2">
-      <p class="text-sm text-muted font-medium">Avelom · UX-Prototyp</p>
-      <h1 class="text-2xl font-semibold tracking-tight">Heute</h1>
+      <p class="text-sm text-muted font-medium">Avelom · Dashboard</p>
+      <h1 class="text-2xl font-semibold tracking-tight">Übersicht</h1>
       <p class="text-neutral-600 dark:text-neutral-400 max-w-prose">
-        Kernflows zum Klicken: Schnellerfassung (&lt; 5 s), Konflikt mit Alternativen, Assistenz-Klärung.
+        Schneller Überblick über Termine, Tagesplan und wichtige Kernflows.
       </p>
       <p v-if="user" class="text-sm text-neutral-600 dark:text-neutral-400">
         Angemeldet als <strong>{{ user.name || user.email }}</strong>
@@ -178,17 +293,118 @@ onMounted(() => {
       </p>
     </div>
 
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <UCard>
+        <p class="text-xs uppercase tracking-wide text-neutral-500">Termine (14 Tage)</p>
+        <p class="mt-2 text-2xl font-semibold">{{ upcomingCount }}</p>
+      </UCard>
+      <UCard>
+        <p class="text-xs uppercase tracking-wide text-neutral-500">Heute</p>
+        <p class="mt-2 text-2xl font-semibold">{{ todayCount }}</p>
+      </UCard>
+      <UCard>
+        <p class="text-xs uppercase tracking-wide text-neutral-500">Gewählter Tag</p>
+        <p class="mt-2 text-2xl font-semibold">{{ selectedDateAppointments.length }}</p>
+      </UCard>
+      <UCard>
+        <p class="text-xs uppercase tracking-wide text-neutral-500">Status</p>
+        <p class="mt-2 text-sm font-medium text-neutral-600 dark:text-neutral-300">
+          {{ primaryTenant ? "Mandant aktiv" : "Kein Mandant" }}
+        </p>
+      </UCard>
+    </div>
+
     <div class="grid gap-3 sm:grid-cols-2">
-      <UButton to="/quick-capture" block size="xl" color="primary" icon="i-lucide-zap">
-        Schnellerfassung
+      <UButton to="/appointments" block size="xl" variant="soft" color="primary" icon="i-lucide-calendar-days">
+        Termine
+      </UButton>
+      <UButton to="/archive" block size="xl" variant="outline" color="neutral" icon="i-lucide-archive">
+        Archiv
+      </UButton>
+      <UButton to="/appointments" block size="xl" color="primary" icon="i-lucide-zap">
+        Schnellerfassung &amp; Assistent
       </UButton>
       <UButton to="/conflict-demo" block size="xl" variant="outline" icon="i-lucide-git-merge">
         Konflikt / Alternativen
       </UButton>
-      <UButton to="/assistant-demo" block size="xl" variant="soft" icon="i-lucide-message-circle-question">
-        Assistenz (Gegenfragen)
+      <UButton size="xl" variant="ghost" color="neutral" icon="i-lucide-refresh-cw" :loading="appointmentsLoading" @click="loadAppointments">
+        Termine neu laden
       </UButton>
     </div>
+
+    <UAlert
+      v-if="appointmentsError"
+      color="error"
+      variant="soft"
+      icon="i-lucide-circle-alert"
+      :title="appointmentsError"
+    />
+
+    <section class="grid gap-4 lg:grid-cols-3">
+      <UCard class="lg:col-span-2">
+        <template #header>
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-lg font-semibold">Termine am gewählten Tag</h2>
+            <span class="text-sm text-neutral-500">{{ selectedDateKey }}</span>
+          </div>
+        </template>
+
+        <div v-if="!primaryTenant" class="text-sm text-neutral-600 dark:text-neutral-400">
+          Für Termine brauchst du eine Mandanten-Mitgliedschaft.
+        </div>
+        <div v-else-if="!selectedDateAppointments.length && !appointmentsLoading" class="text-sm text-neutral-600 dark:text-neutral-400">
+          Keine Termine für diesen Tag.
+        </div>
+        <div v-else class="space-y-3">
+          <div
+            v-for="appointment in selectedDateAppointments"
+            :key="appointment.id"
+            class="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="font-medium">{{ appointmentTitle(appointment) }}</p>
+                <p class="text-sm text-neutral-600 dark:text-neutral-400">
+                  {{ formatDateTime(appointment.startsAt) }}–{{ formatDateTime(appointment.endsAt).split(', ').pop() }}
+                </p>
+              </div>
+              <UBadge color="primary" variant="subtle">{{ appointment.status }}</UBadge>
+            </div>
+            <div class="mt-3 flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-neutral-400">
+              <span v-if="appointment.teacher">{{ teacherLabel }}: {{ appointment.teacher.displayName }}</span>
+              <span v-if="resourcesEnabled && appointment.resource">Ressource: {{ appointment.resource.name }}</span>
+              <span v-if="appointment.lessonType">Art: {{ appointment.lessonType.name }}</span>
+            </div>
+          </div>
+        </div>
+      </UCard>
+
+      <UCard>
+        <template #header>
+          <h2 class="text-lg font-semibold">Kalender</h2>
+        </template>
+        <div class="space-y-3">
+          <UInput v-model="selectedDateKey" type="date" />
+          <div class="grid grid-cols-2 gap-2">
+            <UButton
+              v-for="day in calendarDays"
+              :key="day.key"
+              size="sm"
+              :color="day.key === selectedDateKey ? 'primary' : 'neutral'"
+              :variant="day.key === selectedDateKey ? 'soft' : 'outline'"
+              class="justify-between"
+              @click="selectedDateKey = day.key"
+            >
+              <span>{{ day.label }}</span>
+              <UBadge :color="day.count ? 'primary' : 'neutral'" variant="subtle">{{ day.count }}</UBadge>
+            </UButton>
+          </div>
+          <p class="text-xs text-neutral-500">
+            14-Tage-Ansicht. Wähle einen Tag, um rechts die Termine zu sehen.
+          </p>
+        </div>
+      </UCard>
+    </section>
 
     <section
       v-if="isSuperadmin"

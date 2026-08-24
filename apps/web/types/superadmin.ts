@@ -4,6 +4,7 @@ export interface SuperadminTenant {
   id: string;
   name: string;
   slug: string;
+  useDefaultDuration: boolean;
   createdAt: string;
 }
 

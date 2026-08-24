@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
     prisma.tenant.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: "desc" },
-      select: { id: true, name: true, slug: true, createdAt: true },
+      select: { id: true, name: true, slug: true, useDefaultDuration: true, createdAt: true },
     }),
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
       id: t.id,
       name: t.name,
       slug: t.slug,
+      useDefaultDuration: t.useDefaultDuration,
       createdAt: t.createdAt.toISOString(),
     })),
     users: users.map((u) => ({

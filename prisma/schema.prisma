@@ -59,12 +59,24 @@ model Tenant {
   id        String    @id @default(uuid()) @db.Uuid
   name      String
   slug      String    @unique
+  /// when false, lesson types do not use a default duration and appointments are sized manually
+  useDefaultDuration Boolean @default(true)
+  /// preselected teacher in Schnellerfassung; null = fall back to first teacher
+  defaultTeacherId String? @db.Uuid
+  /// preselected lesson type in Schnellerfassung; null = fall back to first lesson type
+  defaultLessonTypeId String? @db.Uuid
+  /// display name for the teacher role, e.g. Lehrer or Pilot
+  teacherLabel String @default("Lehrer")
+  /// when false, appointments do not use a resource
+  resourcesEnabled Boolean @default(true)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
   deletedByUserId String? @db.Uuid
 
   deletedByUser User? @relation("TenantDeletedBy", fields: [deletedByUserId], references: [id])
+  defaultTeacher TeacherProfile? @relation("TenantDefaultTeacher", fields: [defaultTeacherId], references: [id], onDelete: SetNull)
+  defaultLessonType LessonType? @relation("TenantDefaultLessonType", fields: [defaultLessonTypeId], references: [id], onDelete: SetNull)
 
   memberships          Membership[]
   customers            Customer[]
@@ -81,6 +93,9 @@ model Tenant {
   userAssistantPreferences UserAssistantPreference[]
   deviceContactLinks   DeviceContactLink[]
   customerMergeHistory CustomerMergeHistory[]
+
+  @@index([defaultTeacherId])
+  @@index([defaultLessonTypeId])
 }
 
 model User {
@@ -132,6 +147,7 @@ model TeacherProfile {
 
   tenant     Tenant     @relation(fields: [tenantId], references: [id])
   membership Membership @relation(fields: [membershipId], references: [id])
+  defaultForTenants Tenant[] @relation("TenantDefaultTeacher")
 
   appointments         Appointment[]
   availabilityRules    AvailabilityRule[]
@@ -254,8 +270,9 @@ model LessonType {
   deletedAt DateTime?
   deletedByUserId String? @db.Uuid
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  appointments Appointment[]
+  tenant            Tenant        @relation(fields: [tenantId], references: [id])
+  appointments      Appointment[]
+  defaultForTenants Tenant[]      @relation("TenantDefaultLessonType")
 
   @@index([tenantId])
 }

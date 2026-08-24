@@ -17,6 +17,7 @@ tags:
   - name: Appointments
   - name: Availability
   - name: Customers
+  - name: Scheduling
   - name: Sync
   - name: Assistant
 
@@ -203,9 +204,12 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/AvailabilityRule"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AvailabilityRule"
     post:
       tags: [Availability]
       operationId: createAvailabilityRule
@@ -220,6 +224,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AvailabilityRule"
+
+  /tenants/{tenantId}/teachers/{teacherId}/availability/rules/{ruleId}:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - name: teacherId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: ruleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Availability]
+      operationId: patchAvailabilityRule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityRulePatch"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityRule"
+    delete:
+      tags: [Availability]
+      operationId: deleteAvailabilityRule
+      responses:
+        "204":
+          description: No content
 
   /tenants/{tenantId}/teachers/{teacherId}/availability/exceptions:
     parameters:
@@ -238,9 +278,12 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/AvailabilityException"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AvailabilityException"
     post:
       tags: [Availability]
       operationId: createAvailabilityException
@@ -255,6 +298,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AvailabilityException"
+
+  /tenants/{tenantId}/teachers/{teacherId}/availability/exceptions/{exceptionId}:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - name: teacherId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: exceptionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Availability]
+      operationId: patchAvailabilityException
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityExceptionPatch"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityException"
+    delete:
+      tags: [Availability]
+      operationId: deleteAvailabilityException
+      responses:
+        "204":
+          description: No content
 
   /tenants/{tenantId}/customers:
     parameters:
@@ -332,6 +411,26 @@ paths:
       responses:
         "204":
           description: No content
+
+  /tenants/{tenantId}/scheduling/options:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      tags: [Scheduling]
+      operationId: getSchedulingOptions
+      summary: Lightweight choices for quick scheduling forms
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Optional customer search text
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulingOptions"
 
   /tenants/{tenantId}/sync/push:
     parameters:
@@ -644,6 +743,10 @@ components:
           format: date-time
         status:
           type: string
+          enum: [draft, confirmed, completed, cancelled]
+        lessonTypeId:
+          type: string
+          format: uuid
         teacherId:
           type: string
           format: uuid
@@ -654,6 +757,12 @@ components:
           type: string
           format: uuid
         appointmentContactText:
+          type: string
+        appointmentPhoneRaw:
+          type: string
+        appointmentPhoneE164:
+          type: string
+        unstructuredNote:
           type: string
 
     AvailabilityRule:
@@ -688,6 +797,26 @@ components:
         locationId:
           type: string
           format: uuid
+        activityTags:
+          type: array
+          items:
+            type: string
+        priority:
+          type: integer
+
+    AvailabilityRulePatch:
+      type: object
+      properties:
+        weekday:
+          type: integer
+        startTime:
+          type: string
+        endTime:
+          type: string
+        locationId:
+          type: string
+          format: uuid
+          nullable: true
         activityTags:
           type: array
           items:
@@ -730,6 +859,22 @@ components:
         reason:
           type: string
 
+    AvailabilityExceptionPatch:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [vacation, sick, block, extra_open]
+        startsOn:
+          type: string
+          format: date
+        endsOn:
+          type: string
+          format: date
+        reason:
+          type: string
+          nullable: true
+
     Customer:
       type: object
       properties:
@@ -770,6 +915,75 @@ components:
           type: string
         notes:
           type: string
+
+    SchedulingOptions:
+      type: object
+      properties:
+        businessTimeZone:
+          type: string
+          example: Europe/Rome
+        teachers:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              displayName:
+                type: string
+        resources:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              capacity:
+                type: integer
+        lessonTypes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              defaultDurationMin:
+                type: integer
+                nullable: true
+        defaultTeacherId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Preselected teacher for Schnellerfassung; null falls back to the first teacher
+        defaultLessonTypeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Preselected lesson type for Schnellerfassung; null falls back to the first lesson type
+        teacherLabel:
+          type: string
+          example: Lehrer
+        resourcesEnabled:
+          type: boolean
+        customers:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              displayName:
+                type: string
+              customerSource:
+                type: string
 
     SyncPushRequest:
       type: object

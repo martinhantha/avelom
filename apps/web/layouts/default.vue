@@ -1,8 +1,100 @@
+<script setup lang="ts">
+const route = useRoute();
+const { user, primaryTenant, logout } = useAuth();
+
+const links = computed(() => {
+  const base = [
+    { to: "/", label: "Home", icon: "i-lucide-house" },
+    { to: "/appointments", label: "Termine", icon: "i-lucide-calendar-days" },
+    { to: "/archive", label: "Archiv", icon: "i-lucide-archive" },
+    { to: "/users", label: "Benutzer", icon: "i-lucide-users" },
+    { to: "/lesson-types", label: "Termintypen", icon: "i-lucide-list-checks" },
+    { to: "/conflict-demo", label: "Conflicts", icon: "i-lucide-git-merge" },
+  ];
+  if (user.value?.isSuperadmin) {
+    base.splice(5, 0, { to: "/tenants", label: "Mandanten", icon: "i-lucide-building-2" });
+  }
+  return base;
+});
+</script>
+
 <template>
-  <div class="min-h-dvh flex flex-col bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
-    <AppHeader />
-    <main class="flex-1">
-      <slot />
-    </main>
+  <div class="min-h-dvh bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
+    <aside
+      class="hidden lg:flex fixed inset-y-0 left-0 z-20 w-72 xl:w-80 border-r border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950"
+    >
+      <div class="flex w-full h-dvh max-h-dvh flex-col p-4 gap-4 overflow-hidden">
+        <div class="px-2 pt-2 shrink-0">
+          <NuxtLink to="/" class="text-lg font-semibold tracking-tight">Avelom</NuxtLink>
+          <p class="mt-1 text-xs text-neutral-500">Dashboard</p>
+        </div>
+
+        <nav class="space-y-1 overflow-y-auto flex-1 min-h-0 pr-1">
+          <NuxtLink
+            v-for="link in links"
+            :key="link.to"
+            :to="link.to"
+            class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition"
+            :class="
+              route.path === link.to
+                ? 'bg-primary-100 text-primary-900 dark:bg-primary-900/40 dark:text-primary-100'
+                : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900'
+            "
+          >
+            <UIcon :name="link.icon" class="size-4" />
+            <span>{{ link.label }}</span>
+          </NuxtLink>
+        </nav>
+
+        <div class="shrink-0">
+          <UCard>
+            <p class="text-sm font-medium truncate">{{ user?.name || user?.email || "Account" }}</p>
+            <p class="text-xs text-neutral-500 truncate mt-1">
+              {{ primaryTenant?.tenantName || "Kein Mandant aktiv" }}
+            </p>
+            <div class="mt-3 grid grid-cols-2 gap-2">
+              <UButton to="/settings" size="sm" variant="soft" color="neutral" icon="i-lucide-settings-2">
+                Settings
+              </UButton>
+              <UButton size="sm" color="neutral" variant="outline" icon="i-lucide-log-out" @click="logout()">
+                Logout
+              </UButton>
+            </div>
+          </UCard>
+        </div>
+      </div>
+    </aside>
+
+    <div class="flex w-full">
+      <div class="hidden lg:block lg:w-72 xl:w-80 shrink-0" aria-hidden="true" />
+      <div class="min-w-0 flex-1">
+        <header class="sticky top-0 z-10 border-b border-neutral-200 dark:border-neutral-800 bg-white/85 dark:bg-neutral-950/85 backdrop-blur lg:hidden">
+          <div class="px-4 py-3 flex items-center justify-between gap-3">
+            <NuxtLink to="/" class="font-semibold tracking-tight">Avelom</NuxtLink>
+            <div class="flex items-center gap-2">
+              <UButton to="/settings" size="sm" variant="ghost" color="neutral" icon="i-lucide-settings-2" />
+              <UButton size="sm" variant="ghost" color="neutral" icon="i-lucide-log-out" @click="logout()" />
+            </div>
+          </div>
+          <div class="px-2 pb-3 flex gap-1 overflow-x-auto">
+            <UButton
+              v-for="link in links"
+              :key="link.to"
+              :to="link.to"
+              size="sm"
+              :icon="link.icon"
+              :variant="route.path === link.to ? 'soft' : 'ghost'"
+              color="neutral"
+            >
+              {{ link.label }}
+            </UButton>
+          </div>
+        </header>
+
+        <main class="min-w-0">
+          <slot />
+        </main>
+      </div>
+    </div>
   </div>
 </template>

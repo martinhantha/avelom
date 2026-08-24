@@ -10,6 +10,9 @@ export interface AuthMembership {
   tenantName: string;
   tenantSlug: string;
   role: "ADMIN" | "STAFF" | "END_CUSTOMER";
+  useDefaultDuration: boolean;
+  teacherLabel: string;
+  resourcesEnabled: boolean;
 }
 
 export interface AuthSession {

@@ -7,7 +7,18 @@ export async function loadUserWithMemberships(userId: string) {
     include: {
       memberships: {
         where: { deletedAt: null },
-        include: { tenant: { select: { id: true, name: true, slug: true } } },
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              useDefaultDuration: true,
+              teacherLabel: true,
+              resourcesEnabled: true,
+            },
+          },
+        },
       },
     },
   });
@@ -26,6 +37,9 @@ export function toAuthSession(user: NonNullable<Awaited<ReturnType<typeof loadUs
       tenantName: m.tenant.name,
       tenantSlug: m.tenant.slug,
       role: m.role,
+      useDefaultDuration: m.tenant.useDefaultDuration,
+      teacherLabel: m.tenant.teacherLabel?.trim() || "Lehrer",
+      resourcesEnabled: m.tenant.resourcesEnabled,
     })),
   };
 }

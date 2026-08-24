@@ -6,6 +6,8 @@ export function useAuth() {
   const user = computed(() => session.value?.user ?? null);
   const memberships = computed(() => session.value?.memberships ?? []);
   const primaryTenant = computed(() => memberships.value[0] ?? null);
+  const teacherLabel = computed(() => primaryTenant.value?.teacherLabel?.trim() || "Lehrer");
+  const resourcesEnabled = computed(() => primaryTenant.value?.resourcesEnabled ?? true);
 
   async function refreshSession() {
     try {
@@ -44,6 +46,8 @@ export function useAuth() {
     user,
     memberships,
     primaryTenant,
+    teacherLabel,
+    resourcesEnabled,
     login,
     logout,
     refreshSession,

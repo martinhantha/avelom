@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     },
   });
 
-  await prisma.membership.upsert({
+  const membership = await prisma.membership.upsert({
     where: {
       tenantId_userId: { tenantId: tenant.id, userId: user.id },
     },
@@ -54,6 +54,113 @@ async function main(): Promise<void> {
       deletedByUserId: null,
     },
   });
+
+  const teacher = await prisma.teacherProfile.upsert({
+    where: { membershipId: membership.id },
+    create: {
+      tenantId: tenant.id,
+      membershipId: membership.id,
+      displayName: "Martin Demo",
+      qualifications: ["demo", "standard"],
+    },
+    update: {
+      tenantId: tenant.id,
+      displayName: "Martin Demo",
+      qualifications: ["demo", "standard"],
+      deletedAt: null,
+      deletedByUserId: null,
+    },
+  });
+
+  const existingResource = await prisma.resource.findFirst({
+    where: { tenantId: tenant.id, name: "Ressource Alpha" },
+  });
+  if (existingResource) {
+    await prisma.resource.update({
+      where: { id: existingResource.id },
+      data: { capacity: 1, deletedAt: null, deletedByUserId: null },
+    });
+  } else {
+    await prisma.resource.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Ressource Alpha",
+        capacity: 1,
+      },
+    });
+  }
+
+  const existingLessonType = await prisma.lessonType.findFirst({
+    where: { tenantId: tenant.id, name: "Schnupperstunde" },
+  });
+  if (existingLessonType) {
+    await prisma.lessonType.update({
+      where: { id: existingLessonType.id },
+      data: { defaultDurationMin: 60, deletedAt: null, deletedByUserId: null },
+    });
+  } else {
+    await prisma.lessonType.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Schnupperstunde",
+        defaultDurationMin: 60,
+      },
+    });
+  }
+
+  const existingCustomer = await prisma.customer.findFirst({
+    where: { tenantId: tenant.id, displayName: "Luis Muster" },
+  });
+  if (existingCustomer) {
+    await prisma.customer.update({
+      where: { id: existingCustomer.id },
+      data: { customerSource: "manual", deletedAt: null, deletedByUserId: null },
+    });
+  } else {
+    await prisma.customer.create({
+      data: {
+        tenantId: tenant.id,
+        displayName: "Luis Muster",
+        customerSource: "manual",
+        phones: {
+          create: {
+            tenantId: tenant.id,
+            raw: "+43 660 000000",
+            e164: "+43660000000",
+            isPrimary: true,
+          },
+        },
+      },
+    });
+  }
+
+  for (const weekday of [1, 2, 3, 4, 5]) {
+    const existingRule = await prisma.availabilityRule.findFirst({
+      where: {
+        tenantId: tenant.id,
+        teacherId: teacher.id,
+        weekday,
+        startTime: "08:00",
+        endTime: "18:00",
+      },
+    });
+    if (existingRule) {
+      await prisma.availabilityRule.update({
+        where: { id: existingRule.id },
+        data: { deletedAt: null, deletedByUserId: null },
+      });
+    } else {
+      await prisma.availabilityRule.create({
+        data: {
+          tenantId: tenant.id,
+          teacherId: teacher.id,
+          weekday,
+          startTime: "08:00",
+          endTime: "18:00",
+        },
+      });
+    }
+  }
 
   console.info(`Seed OK — login: ${DEMO_EMAIL} / ${DEMO_PASSWORD} (tenant: ${TENANT_SLUG})`);
 }
