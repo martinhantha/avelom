@@ -27,6 +27,9 @@ const appointments = ref<AppointmentListItem[]>([]);
 const appointmentsLoading = ref(false);
 const appointmentsError = ref("");
 const selectedDateKey = ref("");
+const assistantOpen = ref(false);
+const quickOpen = ref(false);
+const quickInitialContact = ref("");
 
 const tenantForm = reactive({ name: "", slug: "" });
 const userForm = reactive({
@@ -274,6 +277,20 @@ watch(
     loadAppointments();
   },
 );
+
+function openAssistant() {
+  assistantOpen.value = true;
+}
+
+function onAssistantContext(text: string) {
+  assistantOpen.value = false;
+  quickInitialContact.value = text;
+  quickOpen.value = true;
+}
+
+async function onAppointmentSaved() {
+  await loadAppointments();
+}
 </script>
 
 <template>
@@ -321,7 +338,7 @@ watch(
       <UButton to="/archive" block size="xl" variant="outline" color="neutral" icon="i-lucide-archive">
         Archiv
       </UButton>
-      <UButton to="/appointments" block size="xl" color="primary" icon="i-lucide-zap">
+      <UButton block size="xl" color="primary" icon="i-lucide-zap" @click="openAssistant">
         Schnellerfassung &amp; Assistent
       </UButton>
       <UButton to="/conflict-demo" block size="xl" variant="outline" icon="i-lucide-git-merge">
@@ -582,5 +599,42 @@ watch(
         </div>
       </UCard>
     </section>
+
+    <UModal v-model:open="assistantOpen" :ui="{ content: 'max-w-xl' }">
+      <template #header>
+        <div class="flex items-center justify-between gap-3 w-full">
+          <div class="min-w-0">
+            <h2 class="font-medium">Assistent · Gegenfragen</h2>
+            <p class="text-xs text-neutral-500">Kontext klären, dann in den Termin übernehmen.</p>
+          </div>
+          <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="assistantOpen = false" />
+        </div>
+      </template>
+      <template #body>
+        <AssistantPanel @close="assistantOpen = false" @picked-context="onAssistantContext" />
+      </template>
+    </UModal>
+
+    <UModal v-model:open="quickOpen" :ui="{ content: 'max-w-2xl' }">
+      <template #header>
+        <div class="flex items-center justify-between gap-3 w-full">
+          <div class="min-w-0">
+            <h2 class="font-medium">Neuer Termin · Schnellerfassung</h2>
+            <p class="text-xs text-neutral-500">
+              Kontakt erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
+            </p>
+          </div>
+          <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="quickOpen = false" />
+        </div>
+      </template>
+      <template #body>
+        <QuickCaptureForm
+          :key="quickInitialContact || 'empty'"
+          :initial-contact-text="quickInitialContact"
+          @saved="onAppointmentSaved"
+          @cancel="quickOpen = false"
+        />
+      </template>
+    </UModal>
   </UContainer>
 </template>
