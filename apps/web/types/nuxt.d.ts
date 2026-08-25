@@ -1,3 +1,5 @@
+import type { DeviceCapabilities } from "@avelom/device-capabilities";
+
 declare module "nuxt/schema" {
   interface RuntimeConfig {
     authCookie: string;
@@ -8,6 +10,18 @@ declare module "nuxt/schema" {
   interface PageMeta {
     /** Route ohne Login (z. B. /login) */
     public?: boolean;
+  }
+}
+
+declare module "#app" {
+  interface NuxtApp {
+    $device: DeviceCapabilities;
+  }
+}
+
+declare module "vue" {
+  interface ComponentCustomProperties {
+    $device: DeviceCapabilities;
   }
 }
 

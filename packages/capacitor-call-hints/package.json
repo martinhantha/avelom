@@ -1,0 +1,42 @@
+{
+  "name": "@avelom/capacitor-call-hints",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Android recent-call hints for Avelom. Raw call logs never leave the device.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "ios/Sources/",
+    "src/",
+    "AvelomCallHints.podspec",
+    "Package.swift"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    },
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "dependencies": {
+    "@avelom/device-capabilities": "workspace:*"
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/core": "^7.4.3",
+    "typescript": "~5.7.0"
+  }
+}

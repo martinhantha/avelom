@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
+import type { CallHint } from "@avelom/device-capabilities";
+import { isCallHintsOptIn } from "@avelom/device-capabilities";
 import { useAuth } from "../composables/useAuth";
+import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
 
 type WebSpeechRecognitionEventResult = {
@@ -80,6 +83,7 @@ const emit = defineEmits<{
 }>();
 
 const { primaryTenant } = useAuth();
+const { device } = useDeviceCapabilities();
 
 const teacherLabel = computed(
   () => options.value?.teacherLabel || primaryTenant.value?.teacherLabel || "Lehrer",
@@ -106,6 +110,10 @@ const parseHint = ref("");
 const questions = ref<ClarifyingQuestion[]>([]);
 const parseAnswers = reactive<Record<string, string>>({});
 const passengerName = ref("");
+const callHints = ref<CallHint[]>([]);
+const pickingContact = ref(false);
+const savingDeviceContact = ref(false);
+const deviceContactHint = ref("");
 const STOP_COMMAND_RE =
   /(?:^|\s)(?:bitte\s+)?(?:speichern|fertig|ok(?:ay)?|o\.?\s*k\.?|stopp|stop|ende)(?:\s*[.!,])?\s*$/i;
 
@@ -349,6 +357,71 @@ const useTypeDuration = computed(() => primaryTenant.value?.useDefaultDuration ?
 const willCreateCustomer = computed(
   () => Boolean(passengerName.value.trim().length >= 2) && !form.customerId,
 );
+const canPickContact = computed(() => device.value.features.pickContact);
+const canSaveDeviceContact = computed(
+  () =>
+    device.value.features.saveContact &&
+    Boolean(form.phone.trim()) &&
+    Boolean(passengerName.value.trim() || text.value.trim()),
+);
+const showCallHintsOptInHint = computed(
+  () => device.value.features.callHints && !isCallHintsOptIn() && !callHints.value.length,
+);
+
+function applyCallHint(hint: CallHint) {
+  const phone = hint.e164 || hint.raw;
+  if (phone) form.phone = phone;
+}
+
+async function loadCallHints() {
+  if (!device.value.features.callHints || !isCallHintsOptIn()) {
+    callHints.value = [];
+    return;
+  }
+  try {
+    callHints.value = await device.value.getRecentCallHints(5);
+  } catch {
+    callHints.value = [];
+  }
+}
+
+async function pickDeviceContact() {
+  pickingContact.value = true;
+  deviceContactHint.value = "";
+  try {
+    const contact = await device.value.pickContact();
+    if (!contact) return;
+    if (contact.phone) form.phone = contact.phone;
+    if (contact.name && !passengerName.value.trim()) {
+      passengerName.value = contact.name;
+    }
+  } catch {
+    deviceContactHint.value = "Kontakt konnte nicht gelesen werden.";
+  } finally {
+    pickingContact.value = false;
+  }
+}
+
+async function saveDeviceContact() {
+  if (!canSaveDeviceContact.value) return;
+  savingDeviceContact.value = true;
+  deviceContactHint.value = "";
+  try {
+    await device.value.saveOrUpdateDeviceContact({
+      displayName: passengerName.value.trim() || text.value.trim() || "Avelom Kontakt",
+      phoneE164: form.phone.trim() || undefined,
+      note: "Avelom",
+    });
+    deviceContactHint.value =
+      device.value.platform === "web"
+        ? "vCard heruntergeladen — auf dem Telefon importieren."
+        : "Kontakt auf dem Gerät gespeichert.";
+  } catch {
+    deviceContactHint.value = "Kontakt konnte nicht gespeichert werden.";
+  } finally {
+    savingDeviceContact.value = false;
+  }
+}
 
 function onCustomerSelect() {
   const selected = options.value?.customers.find((item) => item.id === form.customerId);
@@ -547,6 +620,7 @@ async function saveAppointment() {
 onMounted(() => {
   setupSpeech();
   loadOptions();
+  void loadCallHints();
   if (props.startWithVoice) {
     window.setTimeout(() => toggleVoiceAssistant(), 250);
   }
@@ -796,7 +870,52 @@ onMounted(() => {
       </UFormField>
 
       <UFormField label="Telefon (optional)" class="sm:col-span-2">
-        <UInput v-model="form.phone" type="tel" placeholder="+43 ..." />
+        <div class="space-y-2">
+          <div class="flex gap-2">
+            <UInput v-model="form.phone" class="flex-1" type="tel" placeholder="+43 ..." />
+            <UButton
+              v-if="canPickContact"
+              type="button"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-contact"
+              :loading="pickingContact"
+              @click="pickDeviceContact"
+            >
+              Kontakt
+            </UButton>
+          </div>
+          <div v-if="callHints.length" class="flex flex-wrap gap-1.5">
+            <UButton
+              v-for="hint in callHints"
+              :key="`${hint.lastSeenAt}:${hint.e164 || hint.raw}`"
+              size="xs"
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-phone-incoming"
+              @click="applyCallHint(hint)"
+            >
+              {{ hint.e164 || hint.raw }}
+            </UButton>
+          </div>
+          <p v-else-if="showCallHintsOptInHint" class="text-xs text-neutral-500">
+            Letzte Anrufe als Vorschlag: in den Einstellungen aktivieren (Android-App).
+          </p>
+          <div v-if="canSaveDeviceContact" class="flex flex-wrap items-center gap-2">
+            <UButton
+              type="button"
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-user-plus"
+              :loading="savingDeviceContact"
+              @click="saveDeviceContact"
+            >
+              Aufs Telefon speichern
+            </UButton>
+            <span v-if="deviceContactHint" class="text-xs text-neutral-500">{{ deviceContactHint }}</span>
+          </div>
+        </div>
       </UFormField>
     </div>
 

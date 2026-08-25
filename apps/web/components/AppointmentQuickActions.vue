@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import {
+  resolveAppointmentDisplayName,
   resolveAppointmentPhone,
   toTelHref,
   toWhatsAppHref,
@@ -28,9 +30,14 @@ const emit = defineEmits<{
   delete: [];
 }>();
 
+const { device } = useDeviceCapabilities();
+const savingContact = ref(false);
+const contactSaveState = ref<"idle" | "saved" | "error">("idle");
+
 const phone = computed(() => resolveAppointmentPhone(props.appointment));
 const telHref = computed(() => (phone.value ? toTelHref(phone.value) : null));
 const whatsappHref = computed(() => (phone.value ? toWhatsAppHref(phone.value) : null));
+const canSaveContact = computed(() => device.value.features.saveContact && Boolean(phone.value));
 const canComplete = computed(
   () =>
     props.showComplete &&
@@ -39,8 +46,33 @@ const canComplete = computed(
 );
 const canDelete = computed(() => props.showDelete);
 const hasActions = computed(
-  () => Boolean(telHref.value || whatsappHref.value || canComplete.value || canDelete.value),
+  () =>
+    Boolean(
+      telHref.value ||
+        whatsappHref.value ||
+        canSaveContact.value ||
+        canComplete.value ||
+        canDelete.value,
+    ),
 );
+
+async function saveDeviceContact() {
+  if (!phone.value) return;
+  savingContact.value = true;
+  contactSaveState.value = "idle";
+  try {
+    await device.value.saveOrUpdateDeviceContact({
+      displayName: resolveAppointmentDisplayName(props.appointment),
+      phoneE164: phone.value,
+      note: "Avelom",
+    });
+    contactSaveState.value = "saved";
+  } catch {
+    contactSaveState.value = "error";
+  } finally {
+    savingContact.value = false;
+  }
+}
 </script>
 
 <template>
@@ -70,6 +102,21 @@ const hasActions = computed(
       :aria-label="compact ? 'WhatsApp öffnen' : undefined"
     >
       <span v-if="!compact">WhatsApp</span>
+    </UButton>
+    <UButton
+      v-if="canSaveContact"
+      :size="compact ? 'xs' : 'sm'"
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-user-plus"
+      :loading="savingContact"
+      :square="compact"
+      :aria-label="compact ? 'Kontakt speichern' : undefined"
+      @click="saveDeviceContact"
+    >
+      <span v-if="!compact">
+        {{ contactSaveState === "saved" ? "Gespeichert" : contactSaveState === "error" ? "Fehler" : "Kontakt" }}
+      </span>
     </UButton>
     <UButton
       v-if="canComplete"

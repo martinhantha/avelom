@@ -16,6 +16,9 @@ export default defineNuxtConfig({
     },
   },
   vite: {
+    optimizeDeps: {
+      include: ["@capacitor/core", "@capacitor-community/contacts"],
+    },
     resolve: {
       dedupe: [
         "vue",
@@ -28,7 +31,7 @@ export default defineNuxtConfig({
   },
   // Reka (Nuxt UI) als CJS aus node_modules lädt sonst ein anderes @vue/runtime-core als der SSR-Bundle.
   ssr: {
-    noExternal: ["reka-ui", "vaul-vue"],
+    noExternal: ["reka-ui", "vaul-vue", "@avelom/device-capabilities", "@avelom/capacitor-call-hints"],
   },
   app: {
     head: {

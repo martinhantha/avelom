@@ -1,0 +1,24 @@
+{
+  "name": "@avelom/mobile-shell",
+  "private": true,
+  "description": "Capacitor native shell around the Avelom Nuxt app",
+  "scripts": {
+    "cap:sync": "cap sync",
+    "cap:copy": "cap copy",
+    "cap:add:android": "cap add android",
+    "cap:add:ios": "cap add ios",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios"
+  },
+  "dependencies": {
+    "@avelom/capacitor-call-hints": "workspace:*",
+    "@capacitor-community/contacts": "^7.0.0",
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "typescript": "~5.7.0"
+  }
+}

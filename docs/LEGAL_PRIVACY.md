@@ -28,7 +28,7 @@
 
 **Pflichtenheft-Anforderungen**
 
-- Feature **standardmäßig aus**; Aktivierung nur nach **klarem Opt-in** und **kurzer Zweckbeschreibung**.
+- Feature **standardmäßig aus**; Aktivierung nur nach **klarem Opt-in** und **kurzer Zweckbeschreibung** (UI: Einstellungen → Dieses Gerät). Opt-in liegt in `localStorage`, nicht auf dem Server.
 - **Keine** serverseitige Speicherung von Roh-Call-Logs, sofern nicht zwingend und rechtlich freigegeben; bevorzugt **nur clientseitige** Verarbeitung zu Vorschlägen.
 - Datenschutzerklärung und ggf. Einwilligung dokumentieren; Widerruf jederzeit.
 - iOS: vergleichbare Funktion i. d. R. **nicht** verfügbar → Feature als **Android-only optional** kennzeichnen.

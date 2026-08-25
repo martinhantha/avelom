@@ -10,3 +10,5 @@ dist/
 coverage/
 prisma/migrations/**/migration_lock.toml
 tmp/
+apps/mobile-shell/android/
+apps/mobile-shell/ios/

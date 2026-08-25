@@ -1,0 +1,20 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:2:1-4:12
+INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:2:1-4:12
+	package
+		INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:2:11-69
+uses-permission#android.permission.READ_CALL_LOG
+ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:3:5-72
+	android:name
+		ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:3:22-69
+uses-sdk
+INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml
+INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml

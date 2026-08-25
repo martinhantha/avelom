@@ -5,9 +5,11 @@ export interface AppointmentPhone {
 }
 
 export interface AppointmentContactSource {
+  appointmentContactText?: string | null;
   appointmentPhoneRaw?: string | null;
   appointmentPhoneE164?: string | null;
   customer?: {
+    displayName?: string | null;
     phones?: AppointmentPhone[] | null;
   } | null;
 }
@@ -18,6 +20,10 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string | nu
     if (trimmed) return trimmed;
   }
   return null;
+}
+
+export function resolveAppointmentDisplayName(appointment: AppointmentContactSource): string {
+  return firstNonEmpty(appointment.customer?.displayName, appointment.appointmentContactText) || "Avelom Kontakt";
 }
 
 export function resolveAppointmentPhone(appointment: AppointmentContactSource): string | null {

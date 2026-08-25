@@ -8,6 +8,7 @@ Mandantenfähige Planungs- und Stundenerfassungsplattform für Flugschulen, Skis
 - **Datenmodell:** [prisma/schema.prisma](prisma/schema.prisma)
 - **Infra:** [docker-compose.yml](docker-compose.yml) · [docs/COOLIFY.md](docs/COOLIFY.md)
 - **Native Adapter-Schnittstelle:** [packages/device-capabilities](packages/device-capabilities)
+- **Mobile Hülle (Capacitor):** [apps/mobile-shell](apps/mobile-shell)
 
 ## Voraussetzungen
 

@@ -12,9 +12,24 @@ export interface ContactWritePayload {
   note?: string;
 }
 
+export interface PickedContact {
+  name?: string;
+  phone?: string;
+  email?: string;
+}
+
 export interface SpeechRecognitionResult {
   transcript: string;
   locale?: string;
+}
+
+export type DevicePlatform = "web" | "android" | "ios";
+
+export interface DeviceFeatureFlags {
+  pickContact: boolean;
+  saveContact: boolean;
+  /** True when the Android CallHints plugin is present (opt-in still required). */
+  callHints: boolean;
 }
 
 /**
@@ -22,13 +37,15 @@ export interface SpeechRecognitionResult {
  */
 export interface DeviceCapabilities {
   readonly id: string;
+  readonly platform: DevicePlatform;
+  readonly features: DeviceFeatureFlags;
 
   startSpeechToText(): Promise<SpeechRecognitionResult>;
   takePhoto(): Promise<Blob | null>;
   requestPushPermission(): Promise<NotificationPermission | "unsupported">;
-  pickContact(): Promise<{ name?: string; phone?: string; email?: string } | null>;
-  /** Optional Android: recent call hints; iOS typically NoOp. */
+  pickContact(): Promise<PickedContact | null>;
+  /** Optional Android: recent call hints; iOS/web typically empty. */
   getRecentCallHints(limit?: number): Promise<CallHint[]>;
-  /** Optional: save or update device contact — must be user-triggered. */
+  /** Save or update device contact — must be user-triggered. Browser: vCard download. */
   saveOrUpdateDeviceContact(payload: ContactWritePayload): Promise<void>;
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
+import { isCallHintsOptIn } from "@avelom/device-capabilities";
 import type { SuperadminOverview, TenantRole } from "../types/superadmin";
 
 interface LessonType {
@@ -24,6 +25,9 @@ interface AvailabilityRule {
 }
 
 const { user, primaryTenant, refreshSession } = useAuth();
+const { device, setCallHintsOptIn } = useDeviceCapabilities();
+const callHintsEnabled = ref(false);
+const callHintsSaving = ref(false);
 
 const isSuperadmin = computed(() => Boolean(user.value?.isSuperadmin));
 const isTenantAdmin = computed(() => primaryTenant.value?.role === "ADMIN");
@@ -142,6 +146,23 @@ function setInfo(msg: string) {
 function setError(msg: string) {
   error.value = msg;
   info.value = "";
+}
+async function toggleCallHints(enabled: boolean) {
+  callHintsSaving.value = true;
+  try {
+    await setCallHintsOptIn(enabled);
+    callHintsEnabled.value = enabled && isCallHintsOptIn();
+    setInfo(
+      callHintsEnabled.value
+        ? "Letzte Anrufe werden nur lokal als Vorschlag genutzt — nicht an den Server gesendet."
+        : "Vorschläge aus der Anrufliste sind deaktiviert.",
+    );
+  } catch (e: unknown) {
+    callHintsEnabled.value = false;
+    setError(e instanceof Error ? e.message : "Anrufliste konnte nicht aktiviert werden");
+  } finally {
+    callHintsSaving.value = false;
+  }
 }
 function apiMessage(e: unknown, fallback: string) {
   const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
@@ -482,6 +503,7 @@ watch(selectedTeacherId, () => {
 onMounted(() => {
   loadLessonTypes();
   loadTeachers();
+  callHintsEnabled.value = isCallHintsOptIn();
 });
 </script>
 
@@ -521,6 +543,43 @@ onMounted(() => {
     </div>
 
     <section v-if="activeTab === 'account'" class="grid gap-4 lg:grid-cols-2">
+      <UCard class="lg:col-span-2">
+        <template #header><h2 class="font-medium">Dieses Gerät</h2></template>
+        <div class="space-y-4 text-sm">
+          <p>
+            <span class="text-neutral-500">Umgebung:</span>
+            {{
+              device.platform === "android"
+                ? "Android-App"
+                : device.platform === "ios"
+                  ? "iOS-App"
+                  : "Browser"
+            }}
+          </p>
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="font-medium">Letzte Anrufe als Telefon-Vorschlag</p>
+              <p class="text-xs text-neutral-500 mt-1">
+                Nur in der Android-App, nur nach Opt-in. Nummern bleiben auf dem Gerät und werden nicht an den Server
+                geschickt. Unter iOS und im Browser nicht verfügbar.
+              </p>
+            </div>
+            <label class="relative inline-flex items-center shrink-0 mt-1" :class="device.features.callHints ? 'cursor-pointer' : 'opacity-50'">
+              <input
+                type="checkbox"
+                class="sr-only peer"
+                :checked="callHintsEnabled"
+                :disabled="!device.features.callHints || callHintsSaving"
+                @change="toggleCallHints(!callHintsEnabled)"
+              />
+              <div class="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 dark:bg-neutral-700 dark:after:bg-neutral-200" />
+            </label>
+          </div>
+          <p class="text-xs text-neutral-500">
+            Kontakte speichern: in der App direkt ins Adressbuch, im Browser als vCard-Download.
+          </p>
+        </div>
+      </UCard>
       <UCard>
         <template #header><h2 class="font-medium">Account</h2></template>
         <div class="space-y-2 text-sm">

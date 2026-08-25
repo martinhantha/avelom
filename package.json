@@ -12,6 +12,7 @@
     "db:studio": "prisma studio",
     "dev:web": "pnpm --filter @avelom/web dev",
     "dev:worker": "pnpm --filter @avelom/worker dev",
+    "dev:mobile": "pnpm --filter @avelom/mobile-shell cap:open:android",
     "import:flights": "tsx scripts/import-flights.ts"
   },
   "dependencies": {
