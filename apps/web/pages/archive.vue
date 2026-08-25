@@ -225,6 +225,26 @@ async function reactivateAppointment(appointment: AppointmentListItem) {
   }
 }
 
+async function deleteAppointment(appointment: AppointmentListItem) {
+  if (!primaryTenant.value?.tenantId) return;
+  if (!confirm(`Termin „${appointmentTitle(appointment)}“ wirklich löschen?`)) return;
+  savingId.value = appointment.id;
+  error.value = "";
+  try {
+    await $fetch(`/api/v1/tenants/${primaryTenant.value.tenantId}/appointments/${appointment.id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    await loadArchive();
+  } catch (e: unknown) {
+    const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
+    error.value =
+      err.data?.data?.message || err.data?.message || err.statusMessage || "Termin konnte nicht gelöscht werden";
+  } finally {
+    savingId.value = "";
+  }
+}
+
 function goToPage(target: number) {
   const next = Math.max(1, Math.min(pagination.value.totalPages, target));
   if (next === page.value) return;
@@ -382,7 +402,13 @@ watch(
             </p>
           </div>
           <div class="flex items-center gap-2">
-            <UBadge color="neutral" variant="subtle">{{ appointment.status }}</UBadge>
+            <UBadge
+              v-if="appointmentStatusLabel(appointment.status)"
+              :color="appointmentStatusColor(appointment.status)"
+              variant="subtle"
+            >
+              {{ appointmentStatusLabel(appointment.status) }}
+            </UBadge>
             <UButton
               size="sm"
               color="primary"
@@ -392,6 +418,16 @@ watch(
               @click="reactivateAppointment(appointment)"
             >
               Reaktivieren
+            </UButton>
+            <UButton
+              size="sm"
+              color="error"
+              variant="soft"
+              icon="i-lucide-trash-2"
+              :loading="savingId === appointment.id"
+              @click="deleteAppointment(appointment)"
+            >
+              Löschen
             </UButton>
           </div>
         </div>

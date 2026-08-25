@@ -41,7 +41,18 @@ const appointmentSelect = {
   lessonType: { select: { id: true, name: true, defaultDurationMin: true } },
   teacher: { select: { id: true, displayName: true } },
   resource: { select: { id: true, name: true, capacity: true } },
-  customer: { select: { id: true, displayName: true, customerSource: true } },
+  customer: {
+    select: {
+      id: true,
+      displayName: true,
+      customerSource: true,
+      phones: {
+        where: { deletedAt: null },
+        select: { e164: true, raw: true, isPrimary: true },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+      },
+    },
+  },
 } satisfies Prisma.AppointmentSelect;
 
 const customerSelect = {

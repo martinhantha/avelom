@@ -9,10 +9,16 @@ interface AppointmentListItem {
   status: "draft" | "confirmed" | "completed" | "cancelled";
   version: number;
   appointmentContactText: string | null;
+  appointmentPhoneRaw: string | null;
+  appointmentPhoneE164: string | null;
   teacher: { id: string; displayName: string } | null;
   resource: { id: string; name: string } | null;
   lessonType: { id: string; name: string } | null;
-  customer: { id: string; displayName: string } | null;
+  customer: {
+    id: string;
+    displayName: string;
+    phones?: { e164: string | null; raw: string | null; isPrimary: boolean }[];
+  } | null;
 }
 
 interface Pagination {
@@ -36,7 +42,7 @@ const error = ref("");
 const savingId = ref("");
 const filterOpen = ref(false);
 const quickOpen = ref(false);
-const assistantOpen = ref(false);
+const quickStartVoice = ref(false);
 const quickInitialContact = ref("");
 const view = ref<"list" | "calendar">("list");
 const calendarMode = ref<"week" | "month">("week");
@@ -81,7 +87,6 @@ const pageSize = ref(25);
 const statusOptions = [
   { value: "draft,confirmed", label: "Offen" },
   { value: "draft", label: "Entwurf" },
-  { value: "confirmed", label: "Bestätigt" },
   { value: "completed", label: "Erledigt" },
   { value: "cancelled", label: "Storniert" },
   { value: "", label: "Alle" },
@@ -283,19 +288,6 @@ function isToday(date: Date) {
   );
 }
 
-function statusColor(status: AppointmentListItem["status"]): "primary" | "success" | "warning" | "neutral" {
-  switch (status) {
-    case "confirmed":
-      return "primary";
-    case "completed":
-      return "success";
-    case "cancelled":
-      return "neutral";
-    default:
-      return "warning";
-  }
-}
-
 async function loadOptions() {
   if (!primaryTenant.value?.tenantId) return;
   options.value = await $fetch<SchedulingOptions>(
@@ -306,20 +298,18 @@ async function loadOptions() {
 
 function openQuickCapture() {
   quickInitialContact.value = "";
+  quickStartVoice.value = false;
   quickOpen.value = true;
 }
 
 function openAssistant() {
-  assistantOpen.value = true;
-}
-
-function onAssistantContext(text: string) {
-  assistantOpen.value = false;
-  quickInitialContact.value = text;
+  quickInitialContact.value = "";
+  quickStartVoice.value = true;
   quickOpen.value = true;
 }
 
 async function onAppointmentSaved() {
+  quickOpen.value = false;
   await loadAppointments();
 }
 
@@ -354,6 +344,26 @@ async function markCompleted(appointment: AppointmentListItem) {
     const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
     error.value =
       err.data?.data?.message || err.data?.message || err.statusMessage || "Termin konnte nicht abgehakt werden";
+  } finally {
+    savingId.value = "";
+  }
+}
+
+async function deleteAppointment(appointment: AppointmentListItem) {
+  if (!primaryTenant.value?.tenantId) return;
+  if (!confirm(`Termin „${appointmentTitle(appointment)}“ wirklich löschen?`)) return;
+  savingId.value = appointment.id;
+  error.value = "";
+  try {
+    await $fetch(`/api/v1/tenants/${primaryTenant.value.tenantId}/appointments/${appointment.id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    await loadAppointments();
+  } catch (e: unknown) {
+    const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
+    error.value =
+      err.data?.data?.message || err.data?.message || err.statusMessage || "Termin konnte nicht gelöscht werden";
   } finally {
     savingId.value = "";
   }
@@ -528,32 +538,37 @@ watch(
       </div>
       <div v-else class="space-y-3">
         <UCard v-for="appointment in appointments" :key="appointment.id">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <p class="font-medium">{{ appointmentTitle(appointment) }}</p>
-              <p class="text-sm text-neutral-600 dark:text-neutral-400">
-                {{ formatDateTime(appointment.startsAt) }}–{{ formatDateTime(appointment.endsAt).split(', ').pop() }}
-              </p>
+          <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
+            <div class="min-w-52 grow">
+              <div class="flex items-start gap-2">
+                <div class="min-w-0">
+                  <p class="font-medium">{{ appointmentTitle(appointment) }}</p>
+                  <p class="text-sm text-neutral-600 dark:text-neutral-400">
+                    {{ formatDateTime(appointment.startsAt) }}–{{ formatDateTime(appointment.endsAt).split(', ').pop() }}
+                  </p>
+                </div>
+                <UBadge
+                  v-if="appointmentStatusLabel(appointment.status)"
+                  :color="appointmentStatusColor(appointment.status)"
+                  variant="subtle"
+                  class="shrink-0"
+                >
+                  {{ appointmentStatusLabel(appointment.status) }}
+                </UBadge>
+              </div>
+              <div class="mt-1.5 flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-neutral-400">
+                <span v-if="appointment.teacher">{{ teacherLabel }}: {{ appointment.teacher.displayName }}</span>
+                <span v-if="resourcesEnabled && appointment.resource">Ressource: {{ appointment.resource.name }}</span>
+                <span v-if="appointment.lessonType">Art: {{ appointment.lessonType.name }}</span>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <UBadge :color="statusColor(appointment.status)" variant="subtle">{{ appointment.status }}</UBadge>
-              <UButton
-                v-if="appointment.status !== 'completed' && appointment.status !== 'cancelled'"
-                size="sm"
-                color="success"
-                variant="soft"
-                icon="i-lucide-check"
-                :loading="savingId === appointment.id"
-                @click="markCompleted(appointment)"
-              >
-               Erledigt
-              </UButton>
-            </div>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-neutral-400">
-            <span v-if="appointment.teacher">{{ teacherLabel }}: {{ appointment.teacher.displayName }}</span>
-            <span v-if="resourcesEnabled && appointment.resource">Ressource: {{ appointment.resource.name }}</span>
-            <span v-if="appointment.lessonType">Art: {{ appointment.lessonType.name }}</span>
+            <AppointmentQuickActions
+              class="ml-auto shrink-0"
+              :appointment="appointment"
+              :loading="savingId === appointment.id"
+              @complete="markCompleted(appointment)"
+              @delete="deleteAppointment(appointment)"
+            />
           </div>
         </UCard>
       </div>
@@ -652,30 +667,32 @@ watch(
               :key="appointment.id"
               class="rounded-md border border-neutral-200 dark:border-neutral-800 px-2 py-1.5 text-xs leading-tight bg-neutral-50 dark:bg-neutral-900"
             >
-              <div class="flex items-center justify-between gap-1">
-                <span class="font-medium tabular-nums">{{ formatTime(appointment.startsAt) }}</span>
-                <UBadge :color="statusColor(appointment.status)" variant="subtle" size="xs">
-                  {{ appointment.status }}
-                </UBadge>
-              </div>
-              <p class="mt-0.5 truncate font-medium">{{ appointmentTitle(appointment) }}</p>
-              <p v-if="appointment.teacher" class="truncate text-neutral-500">
-                {{ appointment.teacher.displayName }}
-              </p>
-              <div
-                v-if="appointment.status !== 'completed' && appointment.status !== 'cancelled'"
-                class="mt-1"
-              >
-                <UButton
-                  size="xs"
-                  color="success"
-                  variant="ghost"
-                  icon="i-lucide-check"
+              <div class="flex items-start justify-between gap-1">
+                <div class="min-w-0">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="font-medium tabular-nums">{{ formatTime(appointment.startsAt) }}</span>
+                    <UBadge
+                      v-if="appointmentStatusLabel(appointment.status)"
+                      :color="appointmentStatusColor(appointment.status)"
+                      variant="subtle"
+                      size="xs"
+                    >
+                      {{ appointmentStatusLabel(appointment.status) }}
+                    </UBadge>
+                  </div>
+                  <p class="mt-0.5 truncate font-medium">{{ appointmentTitle(appointment) }}</p>
+                  <p v-if="appointment.teacher" class="truncate text-neutral-500">
+                    {{ appointment.teacher.displayName }}
+                  </p>
+                </div>
+                <AppointmentQuickActions
+                  class="shrink-0"
+                  compact
+                  :appointment="appointment"
                   :loading="savingId === appointment.id"
-                  @click="markCompleted(appointment)"
-                >
-                  Erledigt
-                </UButton>
+                  @complete="markCompleted(appointment)"
+                  @delete="deleteAppointment(appointment)"
+                />
               </div>
             </div>
             <p
@@ -768,26 +785,12 @@ watch(
       </template>
       <template #body>
         <QuickCaptureForm
-          :key="quickInitialContact || 'empty'"
+          :key="`${quickStartVoice ? 'voice' : 'type'}-${quickInitialContact || 'empty'}`"
           :initial-contact-text="quickInitialContact"
+          :start-with-voice="quickStartVoice"
           @saved="onAppointmentSaved"
           @cancel="quickOpen = false"
         />
-      </template>
-    </UModal>
-
-    <UModal v-model:open="assistantOpen" :ui="{ content: 'max-w-xl' }">
-      <template #header>
-        <div class="flex items-center justify-between gap-3 w-full">
-          <div class="min-w-0">
-            <h2 class="font-medium">Assistent · Gegenfragen</h2>
-            <p class="text-xs text-neutral-500">Kontext klären, dann in den Termin übernehmen.</p>
-          </div>
-          <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="assistantOpen = false" />
-        </div>
-      </template>
-      <template #body>
-        <AssistantPanel @close="assistantOpen = false" @picked-context="onAssistantContext" />
       </template>
     </UModal>
   </UContainer>

@@ -8,12 +8,19 @@ interface AppointmentListItem {
   id: string;
   startsAt: string;
   endsAt: string;
-  status: string;
+  status: "draft" | "confirmed" | "completed" | "cancelled";
+  version: number;
   appointmentContactText: string | null;
+  appointmentPhoneRaw: string | null;
+  appointmentPhoneE164: string | null;
   teacher: { id: string; displayName: string } | null;
   resource: { id: string; name: string } | null;
   lessonType: { id: string; name: string } | null;
-  customer: { id: string; displayName: string } | null;
+  customer: {
+    id: string;
+    displayName: string;
+    phones?: { e164: string | null; raw: string | null; isPrimary: boolean }[];
+  } | null;
 }
 
 const { user, primaryTenant, teacherLabel, resourcesEnabled } = useAuth();
@@ -26,10 +33,11 @@ const saInfo = ref("");
 const appointments = ref<AppointmentListItem[]>([]);
 const appointmentsLoading = ref(false);
 const appointmentsError = ref("");
+const savingId = ref("");
 const selectedDateKey = ref("");
-const assistantOpen = ref(false);
 const quickOpen = ref(false);
 const quickInitialContact = ref("");
+const quickStartVoice = ref(false);
 
 const tenantForm = reactive({ name: "", slug: "" });
 const userForm = reactive({
@@ -279,17 +287,55 @@ watch(
 );
 
 function openAssistant() {
-  assistantOpen.value = true;
-}
-
-function onAssistantContext(text: string) {
-  assistantOpen.value = false;
-  quickInitialContact.value = text;
+  quickInitialContact.value = "";
+  quickStartVoice.value = true;
   quickOpen.value = true;
 }
 
 async function onAppointmentSaved() {
+  quickOpen.value = false;
   await loadAppointments();
+}
+
+async function markCompleted(appointment: AppointmentListItem) {
+  if (!primaryTenant.value?.tenantId) return;
+  savingId.value = appointment.id;
+  appointmentsError.value = "";
+  try {
+    await $fetch(`/api/v1/tenants/${primaryTenant.value.tenantId}/appointments/${appointment.id}`, {
+      method: "PATCH",
+      credentials: "include",
+      body: { status: "completed" },
+      headers: { "If-Match": String(appointment.version) },
+    });
+    await loadAppointments();
+  } catch (e: unknown) {
+    const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
+    appointmentsError.value =
+      err.data?.data?.message || err.data?.message || err.statusMessage || "Termin konnte nicht abgehakt werden";
+  } finally {
+    savingId.value = "";
+  }
+}
+
+async function deleteAppointment(appointment: AppointmentListItem) {
+  if (!primaryTenant.value?.tenantId) return;
+  if (!confirm(`Termin „${appointmentTitle(appointment)}“ wirklich löschen?`)) return;
+  savingId.value = appointment.id;
+  appointmentsError.value = "";
+  try {
+    await $fetch(`/api/v1/tenants/${primaryTenant.value.tenantId}/appointments/${appointment.id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    await loadAppointments();
+  } catch (e: unknown) {
+    const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
+    appointmentsError.value =
+      err.data?.data?.message || err.data?.message || err.statusMessage || "Termin konnte nicht gelöscht werden";
+  } finally {
+    savingId.value = "";
+  }
 }
 </script>
 
@@ -378,19 +424,37 @@ async function onAppointmentSaved() {
             :key="appointment.id"
             class="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4"
           >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="font-medium">{{ appointmentTitle(appointment) }}</p>
-                <p class="text-sm text-neutral-600 dark:text-neutral-400">
-                  {{ formatDateTime(appointment.startsAt) }}–{{ formatDateTime(appointment.endsAt).split(', ').pop() }}
-                </p>
+            <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
+              <div class="min-w-52 grow">
+                <div class="flex items-start gap-2">
+                  <div class="min-w-0">
+                    <p class="font-medium">{{ appointmentTitle(appointment) }}</p>
+                    <p class="text-sm text-neutral-600 dark:text-neutral-400">
+                      {{ formatDateTime(appointment.startsAt) }}–{{ formatDateTime(appointment.endsAt).split(', ').pop() }}
+                    </p>
+                  </div>
+                  <UBadge
+                    v-if="appointmentStatusLabel(appointment.status)"
+                    :color="appointmentStatusColor(appointment.status)"
+                    variant="subtle"
+                    class="shrink-0"
+                  >
+                    {{ appointmentStatusLabel(appointment.status) }}
+                  </UBadge>
+                </div>
+                <div class="mt-1.5 flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-neutral-400">
+                  <span v-if="appointment.teacher">{{ teacherLabel }}: {{ appointment.teacher.displayName }}</span>
+                  <span v-if="resourcesEnabled && appointment.resource">Ressource: {{ appointment.resource.name }}</span>
+                  <span v-if="appointment.lessonType">Art: {{ appointment.lessonType.name }}</span>
+                </div>
               </div>
-              <UBadge color="primary" variant="subtle">{{ appointment.status }}</UBadge>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-neutral-400">
-              <span v-if="appointment.teacher">{{ teacherLabel }}: {{ appointment.teacher.displayName }}</span>
-              <span v-if="resourcesEnabled && appointment.resource">Ressource: {{ appointment.resource.name }}</span>
-              <span v-if="appointment.lessonType">Art: {{ appointment.lessonType.name }}</span>
+              <AppointmentQuickActions
+                class="ml-auto shrink-0"
+                :appointment="appointment"
+                :loading="savingId === appointment.id"
+                @complete="markCompleted(appointment)"
+                @delete="deleteAppointment(appointment)"
+              />
             </div>
           </div>
         </div>
@@ -600,28 +664,13 @@ async function onAppointmentSaved() {
       </UCard>
     </section>
 
-    <UModal v-model:open="assistantOpen" :ui="{ content: 'max-w-xl' }">
-      <template #header>
-        <div class="flex items-center justify-between gap-3 w-full">
-          <div class="min-w-0">
-            <h2 class="font-medium">Assistent · Gegenfragen</h2>
-            <p class="text-xs text-neutral-500">Kontext klären, dann in den Termin übernehmen.</p>
-          </div>
-          <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="assistantOpen = false" />
-        </div>
-      </template>
-      <template #body>
-        <AssistantPanel @close="assistantOpen = false" @picked-context="onAssistantContext" />
-      </template>
-    </UModal>
-
     <UModal v-model:open="quickOpen" :ui="{ content: 'max-w-2xl' }">
       <template #header>
         <div class="flex items-center justify-between gap-3 w-full">
           <div class="min-w-0">
             <h2 class="font-medium">Neuer Termin · Schnellerfassung</h2>
             <p class="text-xs text-neutral-500">
-              Kontakt erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
+              Per Sprache oder Text erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
             </p>
           </div>
           <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="quickOpen = false" />
@@ -629,8 +678,9 @@ async function onAppointmentSaved() {
       </template>
       <template #body>
         <QuickCaptureForm
-          :key="quickInitialContact || 'empty'"
+          :key="`${quickStartVoice ? 'voice' : 'type'}-${quickInitialContact || 'empty'}`"
           :initial-contact-text="quickInitialContact"
+          :start-with-voice="quickStartVoice"
           @saved="onAppointmentSaved"
           @cancel="quickOpen = false"
         />

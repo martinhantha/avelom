@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
 import { useAuth } from "../composables/useAuth";
+import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
 
 type WebSpeechRecognitionEventResult = {
   isFinal: boolean;
@@ -70,6 +71,7 @@ const props = defineProps<{
   initialContactText?: string;
   initialTeacherId?: string;
   initialLessonTypeId?: string;
+  startWithVoice?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -99,8 +101,45 @@ const speechSupported = ref(false);
 const speechListening = ref(false);
 const speechInterim = ref("");
 const speechError = ref("");
+const parseLoading = ref(false);
+const parseHint = ref("");
+const questions = ref<ClarifyingQuestion[]>([]);
+const parseAnswers = reactive<Record<string, string>>({});
+const passengerName = ref("");
+const STOP_COMMAND_RE =
+  /(?:^|\s)(?:bitte\s+)?(?:speichern|fertig|ok(?:ay)?|o\.?\s*k\.?|stopp|stop|ende)(?:\s*[.!,])?\s*$/i;
+
 let recognition: WebSpeechRecognition | null = null;
 let speechTextBase = "";
+let parseAfterListen = false;
+let speechStopping = false;
+
+function stripStopCommand(value: string): { cleaned: string; stop: boolean } {
+  const match = STOP_COMMAND_RE.exec(value);
+  if (!match) return { cleaned: value.replace(/\s+/g, " ").trim(), stop: false };
+  return { cleaned: value.slice(0, match.index).replace(/\s+/g, " ").trim(), stop: true };
+}
+
+function stopListeningWithParse() {
+  if (speechStopping) return;
+  speechStopping = true;
+  speechListening.value = false;
+  speechInterim.value = "";
+  parseAfterListen = true;
+  if (!recognition) {
+    parseAfterListen = false;
+    speechStopping = false;
+    void parseFromText();
+    return;
+  }
+  try {
+    recognition.stop();
+  } catch {
+    parseAfterListen = false;
+    speechStopping = false;
+    void parseFromText();
+  }
+}
 
 function getSpeechCtor(): WebSpeechCtor | null {
   if (typeof window === "undefined") return null;
@@ -124,6 +163,7 @@ function setupSpeech() {
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;
   recognition.onresult = (event) => {
+    if (speechStopping) return;
     let finalChunk = "";
     let interimChunk = "";
     for (let i = event.resultIndex; i < event.results.length; i += 1) {
@@ -136,14 +176,28 @@ function setupSpeech() {
       }
     }
     if (finalChunk) {
-      speechTextBase = (speechTextBase ? `${speechTextBase} ` : "") + finalChunk.trim();
-      text.value = speechTextBase;
+      const combined = `${speechTextBase} ${finalChunk}`.replace(/\s+/g, " ").trim();
+      const { cleaned, stop } = stripStopCommand(combined);
+      speechTextBase = cleaned;
+      text.value = cleaned;
       speechInterim.value = "";
-    } else {
+      if (stop) {
+        stopListeningWithParse();
+        return;
+      }
+    }
+    if (interimChunk) {
+      const combined = `${speechTextBase} ${interimChunk}`.replace(/\s+/g, " ").trim();
+      const { cleaned, stop } = stripStopCommand(combined);
+      if (stop) {
+        speechTextBase = cleaned;
+        text.value = cleaned;
+        speechInterim.value = "";
+        stopListeningWithParse();
+        return;
+      }
       speechInterim.value = interimChunk;
-      text.value = speechTextBase
-        ? `${speechTextBase} ${interimChunk}`.trim()
-        : interimChunk;
+      text.value = combined;
     }
   };
   recognition.onerror = (event) => {
@@ -157,6 +211,12 @@ function setupSpeech() {
   recognition.onend = () => {
     speechListening.value = false;
     speechInterim.value = "";
+    const shouldParse = parseAfterListen;
+    parseAfterListen = false;
+    speechStopping = false;
+    if (shouldParse) {
+      void parseFromText();
+    }
   };
 }
 
@@ -169,6 +229,7 @@ function toggleSpeech() {
   }
   speechTextBase = text.value.trim();
   speechInterim.value = "";
+  speechStopping = false;
   try {
     recognition.start();
     speechListening.value = true;
@@ -177,6 +238,88 @@ function toggleSpeech() {
     speechError.value = err.message || "Sprachaufnahme konnte nicht gestartet werden.";
     speechListening.value = false;
   }
+}
+
+function toggleVoiceAssistant() {
+  speechError.value = "";
+  parseHint.value = "";
+  if (!recognition) {
+    void parseFromText();
+    return;
+  }
+  if (speechListening.value) {
+    parseAfterListen = true;
+    recognition.stop();
+    return;
+  }
+  Object.keys(parseAnswers).forEach((key) => delete parseAnswers[key]);
+  parseAfterListen = true;
+  toggleSpeech();
+}
+
+function applyParsed(parsed: ParsedAppointmentIntent) {
+  if (parsed.contactText) text.value = parsed.contactText;
+  if (parsed.date) form.date = parsed.date;
+  if (parsed.time) form.time = parsed.time;
+  if (parsed.durationMinutes) form.durationMinutes = parsed.durationMinutes;
+  if (parsed.teacherId) form.teacherId = parsed.teacherId;
+  if (parsed.resourceId) form.resourceId = parsed.resourceId;
+  if (parsed.lessonTypeId) form.lessonTypeId = parsed.lessonTypeId;
+  if (parsed.phone) form.phone = parsed.phone;
+  if (parsed.note) form.note = parsed.note;
+  if (parsed.customerId) {
+    form.customerId = parsed.customerId;
+    const known = options.value?.customers.find((item) => item.id === parsed.customerId);
+    passengerName.value = parsed.customerName || known?.displayName || passengerName.value;
+    if (parsed.customerName && options.value && !known) {
+      options.value.customers = [
+        ...options.value.customers,
+        { id: parsed.customerId, displayName: parsed.customerName },
+      ];
+    }
+  } else if (parsed.customerName) {
+    form.customerId = "";
+    passengerName.value = parsed.customerName;
+  } else {
+    form.customerId = "";
+    passengerName.value = "";
+  }
+}
+
+async function parseFromText() {
+  if (!primaryTenant.value || !text.value.trim()) return;
+  parseLoading.value = true;
+  parseHint.value = "";
+  error.value = "";
+  try {
+    const result = await $fetch<ParseIntentResponse>(
+      `/api/v1/tenants/${primaryTenant.value.tenantId}/assistant/parse-intent`,
+      {
+        method: "POST",
+        credentials: "include",
+        body: { text: text.value, answers: { ...parseAnswers } },
+      },
+    );
+    applyParsed(result.parsed);
+    questions.value = result.clarifyingQuestions ?? [];
+    const passenger = result.parsed.customerName;
+    parseHint.value = questions.value.length
+      ? "Bitte noch kurz klären – danach sind die Felder vollständig."
+      : passenger
+        ? result.parsed.customerId
+          ? `Felder übernommen. Passagier gefunden: ${passenger}. Bitte prüfen und speichern.`
+          : `Felder übernommen. Passagier „${passenger}“ wird beim Speichern als neuer Kunde angelegt.`
+        : "Felder übernommen, aber kein Passagier erkannt. Name bitte unten eintragen.";
+  } catch (e: unknown) {
+    error.value = apiErrorMessage(e);
+  } finally {
+    parseLoading.value = false;
+  }
+}
+
+function answerQuestion(questionId: string, value: string) {
+  parseAnswers[questionId] = value;
+  void parseFromText();
 }
 
 onBeforeUnmount(() => {
@@ -203,6 +346,22 @@ const form = reactive({
 
 const durationOptions = [30, 45, 60, 90, 120];
 const useTypeDuration = computed(() => primaryTenant.value?.useDefaultDuration ?? true);
+const willCreateCustomer = computed(
+  () => Boolean(passengerName.value.trim().length >= 2) && !form.customerId,
+);
+
+function onCustomerSelect() {
+  const selected = options.value?.customers.find((item) => item.id === form.customerId);
+  if (selected) passengerName.value = selected.displayName;
+}
+
+watch(passengerName, (name) => {
+  const selected = options.value?.customers.find((item) => item.id === form.customerId);
+  if (!selected) return;
+  if (name.trim() !== selected.displayName) {
+    form.customerId = "";
+  }
+});
 
 const selectedLessonType = computed(() =>
   options.value?.lessonTypes.find((item) => item.id === form.lessonTypeId) ?? null,
@@ -330,6 +489,33 @@ async function saveAppointment() {
   saved.value = null;
 
   try {
+    let customerId = form.customerId || undefined;
+    if (!customerId && passengerName.value.trim().length >= 2) {
+      const created = await $fetch<{ id: string; displayName: string }>(
+        `/api/v1/tenants/${primaryTenant.value.tenantId}/customers`,
+        {
+          method: "POST",
+          credentials: "include",
+          body: {
+            displayName: passengerName.value.trim(),
+            customerSource: "from_appointment",
+            phones: form.phone
+              ? [{ e164: form.phone, raw: form.phone, isPrimary: true }]
+              : [],
+          },
+        },
+      );
+      customerId = created.id;
+      if (options.value && !options.value.customers.some((item) => item.id === created.id)) {
+        options.value.customers = [
+          ...options.value.customers,
+          { id: created.id, displayName: created.displayName },
+        ];
+      }
+      form.customerId = created.id;
+      passengerName.value = created.displayName;
+    }
+
     const result = await $fetch<AppointmentDto>(
       `/api/v1/tenants/${primaryTenant.value.tenantId}/appointments`,
       {
@@ -342,7 +528,7 @@ async function saveAppointment() {
           lessonTypeId: form.lessonTypeId || undefined,
           teacherId: form.teacherId || undefined,
           resourceId: resourcesEnabled.value ? form.resourceId || undefined : undefined,
-          customerId: form.customerId || undefined,
+          customerId,
           appointmentContactText: text.value,
           appointmentPhoneRaw: form.phone || undefined,
           unstructuredNote: form.note || undefined,
@@ -361,6 +547,9 @@ async function saveAppointment() {
 onMounted(() => {
   setupSpeech();
   loadOptions();
+  if (props.startWithVoice) {
+    window.setTimeout(() => toggleVoiceAssistant(), 250);
+  }
 });
 </script>
 
@@ -392,10 +581,75 @@ onMounted(() => {
       :description="conflictType ? `${error} (${conflictType})` : error"
     />
 
+    <div class="rounded-lg border border-primary-200 dark:border-primary-900 bg-primary-50/70 dark:bg-primary-950/30 p-3 space-y-3">
+      <div class="flex flex-wrap gap-2">
+        <UButton
+          type="button"
+          :color="speechListening ? 'error' : 'primary'"
+          :variant="speechListening ? 'solid' : undefined"
+          :icon="speechListening ? 'i-lucide-mic-off' : 'i-lucide-mic'"
+          :loading="parseLoading"
+          @click="toggleVoiceAssistant"
+        >
+          {{ speechListening ? "Stoppen & Felder füllen" : "Sprachassistent" }}
+        </UButton>
+        <UButton
+          type="button"
+          variant="outline"
+          color="neutral"
+          icon="i-lucide-sparkles"
+          :loading="parseLoading"
+          :disabled="!text.trim()"
+          @click="parseFromText"
+        >
+          Text auswerten
+        </UButton>
+      </div>
+      <p class="text-xs text-neutral-600 dark:text-neutral-400">
+        Beispiel: „morgen Flug 14 Uhr Martin, Passagier Alexandra, Telefon +49 333 6788. Fertig.“
+        Am Ende „Fertig“, „Speichern“ oder „OK“ sagen, dann stoppt die Aufnahme.
+      </p>
+    </div>
+
+    <UAlert
+      v-if="parseHint"
+      color="success"
+      variant="subtle"
+      icon="i-lucide-sparkles"
+      :title="parseHint"
+    />
+
+    <div v-if="questions.length" class="space-y-3">
+      <div v-for="question in questions" :key="question.id" class="space-y-2">
+        <p class="text-sm font-medium">{{ question.prompt }}</p>
+        <div class="flex flex-col gap-2">
+          <UButton
+            v-for="option in question.options"
+            :key="option.value"
+            block
+            color="neutral"
+            variant="soft"
+            @click="answerQuestion(question.id, option.value)"
+          >
+            {{ option.label }}
+          </UButton>
+        </div>
+      </div>
+    </div>
+
+    <UAlert
+      v-if="willCreateCustomer"
+      color="info"
+      variant="subtle"
+      icon="i-lucide-user-plus"
+      :title="`Neuer Kunde wird angelegt: ${passengerName}`"
+      description="Beim Speichern wird der Passagier als Kunde erstellt, falls er noch nicht existiert."
+    />
+
     <UFormField
       label="Kontakt oder Notiz"
       required
-      :hint="speechSupported ? 'Mikrofon nutzen für Diktat (de-DE)' : undefined"
+      :hint="speechSupported ? 'Oder nur diktieren – der Sprachassistent füllt die Felder.' : undefined"
     >
       <div class="relative">
         <UTextarea
@@ -420,7 +674,7 @@ onMounted(() => {
       <template v-if="speechListening" #help>
         <span class="flex items-center gap-2 text-xs text-primary-700 dark:text-primary-300">
           <span class="inline-block size-2 rounded-full bg-red-500 animate-pulse" />
-          Aufnahme läuft…
+          Aufnahme läuft… Sage „Fertig“, „Speichern“ oder „OK“ zum Stoppen.
           <span v-if="speechInterim" class="italic text-neutral-500 truncate">„{{ speechInterim }}"</span>
         </span>
       </template>
@@ -516,16 +770,29 @@ onMounted(() => {
         </select>
       </UFormField>
 
-      <UFormField label="Kunde (optional)">
-        <select
-          v-model="form.customerId"
-          class="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
-        >
-          <option value="">Nur freien Kontakttext speichern</option>
-          <option v-for="customer in options?.customers || []" :key="customer.id" :value="customer.id">
-            {{ customer.displayName }}
-          </option>
-        </select>
+      <UFormField label="Passagier / Kunde" class="sm:col-span-2">
+        <div class="space-y-2">
+          <UInput
+            v-model="passengerName"
+            placeholder="Name, z. B. Alexandra"
+          />
+          <select
+            v-model="form.customerId"
+            class="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
+            @change="onCustomerSelect"
+          >
+            <option value="">
+              {{
+                passengerName.trim()
+                  ? `Neu anlegen: ${passengerName.trim()}`
+                  : "Kein Kunde / nur Kontakttext"
+              }}
+            </option>
+            <option v-for="customer in options?.customers || []" :key="customer.id" :value="customer.id">
+              {{ customer.displayName }}
+            </option>
+          </select>
+        </div>
       </UFormField>
 
       <UFormField label="Telefon (optional)" class="sm:col-span-2">

@@ -65,599 +65,385 @@ const WEEKDAYS: Record<string, number> = {
   donnerstag: 4,
   freitag: 5,
   samstag: 6,
-  sonnabend: 6,
-};
-
-const WEEKDAY_ABBR: Record<string, number> = {
-  so: 0,
-  mo: 1,
-  di: 2,
-  mi: 3,
-  do: 4,
-  fr: 5,
-  sa: 6,
 };
 
 const MONTHS: Record<string, number> = {
   januar: 1,
-  jan: 1,
   februar: 2,
-  feb: 2,
   maerz: 3,
   marz: 3,
-  mar: 3,
   april: 4,
-  apr: 4,
   mai: 5,
   juni: 6,
-  jun: 6,
   juli: 7,
-  jul: 7,
   august: 8,
-  aug: 8,
   september: 9,
-  sept: 9,
-  sep: 9,
   oktober: 10,
-  okt: 10,
   november: 11,
-  nov: 11,
   dezember: 12,
-  dez: 12,
 };
 
-const STOPWORDS = new Set([
-  "am",
-  "an",
-  "auf",
-  "bei",
-  "beim",
-  "bitte",
-  "das",
-  "dem",
-  "den",
-  "der",
-  "des",
-  "die",
-  "dort",
-  "ein",
-  "eine",
-  "einen",
-  "einer",
-  "fuer",
-  "hier",
-  "im",
-  "in",
-  "ins",
-  "ist",
-  "mal",
-  "mit",
-  "nach",
-  "noch",
-  "ok",
-  "okay",
-  "plus",
-  "so",
-  "um",
-  "und",
-  "von",
-  "vom",
-  "zu",
-  "zum",
-  "zur",
-  "uhr",
-  "heute",
-  "morgen",
-  "uebermorgen",
-  "naechste",
-  "naechsten",
-  "kommenden",
-  "kommende",
+const STOP = new Set([
+  "am", "an", "auf", "bei", "bitte", "das", "dem", "den", "der", "die", "dort",
+  "ein", "eine", "fuer", "hier", "im", "in", "ist", "mal", "mit", "nach", "noch",
+  "ok", "okay", "plus", "so", "um", "und", "von", "zu", "zum", "uhr", "heute",
+  "morgen", "uebermorgen",
 ]);
 
 const NAME_STOP = new Set([
-  ...STOPWORDS,
-  "telefon",
-  "telefonnummer",
-  "tel",
-  "handy",
-  "mobil",
-  "mobilnummer",
-  "nummer",
-  "passagier",
-  "passagiere",
-  "passagierin",
-  "kunde",
-  "kundin",
-  "schueler",
-  "schuelerin",
-  "gast",
-  "teilnehmer",
-  "teilnehmerin",
-  "flug",
-  "stunde",
-  "stunden",
-  "minute",
-  "minuten",
-  "min",
-  "termin",
+  ...STOP,
+  "telefon", "telefonnummer", "tel", "handy", "mobil", "nummer",
+  "passagier", "passagierin", "passager", "passaschier", "passenger", "fluggast",
+  "kunde", "kundin", "schueler", "schuelerin", "mitfahrer", "mitfahrerin",
+  "gast", "flug", "stunde", "stunden", "minute", "minuten", "termin",
+  "heisst", "namens", "genannt", "teilnehmer", "teilnehmerin",
 ]);
 
-const PASSENGER_LABEL =
-  /\b(passagier(?:in|e|en)?|kunde|kundin|schueler(?:in)?|gast|teilnehmer(?:in)?)\b/i;
+const PASSENGER_RE =
+  /\b(passa[sgjch]+(?:ier|er|e|in)?|passenger|fluggast|mitfahrer(?:in)?|kunde|kundin|schueler(?:in)?|gast|teilnehmer(?:in)?|namens)\b/i;
 
 function fold(value: string): string {
   return value
     .normalize("NFKC")
     .replace(/ß/g, "ss")
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
-    .replace(/Ä/g, "ae")
-    .replace(/Ö/g, "oe")
-    .replace(/Ü/g, "ue")
+    .replace(/[äÄ]/g, "ae")
+    .replace(/[öÖ]/g, "oe")
+    .replace(/[üÜ]/g, "ue")
     .toLowerCase();
 }
 
-function pad(value: number): string {
-  return String(value).padStart(2, "0");
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
 }
 
 function dateKey(year: number, month: number, day: number): string {
   return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-function zonedYmd(now: Date, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
+function zonedToday(now: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     weekday: "short",
   }).formatToParts(now);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const weekdayMap: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  const week: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
   return {
     year: Number(map.year),
     month: Number(map.month),
     day: Number(map.day),
-    weekday: weekdayMap[map.weekday] ?? now.getDay(),
+    weekday: week[map.weekday] ?? now.getDay(),
   };
 }
 
-function addDaysYmd(
-  ymd: { year: number; month: number; day: number },
-  days: number,
-): { year: number; month: number; day: number } {
-  const utc = Date.UTC(ymd.year, ymd.month - 1, ymd.day + days);
-  const date = new Date(utc);
-  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
-}
-
-function nextWeekday(
-  ymd: { year: number; month: number; day: number; weekday: number },
-  target: number,
-): { year: number; month: number; day: number } {
-  const delta = (target - ymd.weekday + 7) % 7;
-  return addDaysYmd(ymd, delta);
+function addDays(ymd: { year: number; month: number; day: number }, days: number) {
+  const d = new Date(Date.UTC(ymd.year, ymd.month - 1, ymd.day + days));
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 
 function consume(text: string, start: number, end: number): string {
-  return `${text.slice(0, start)}${" ".repeat(Math.max(0, end - start))}${text.slice(end)}`;
+  return text.slice(0, start) + " ".repeat(Math.max(0, end - start)) + text.slice(end);
 }
 
-function replaceFirst(text: string, regex: RegExp, replacer: (match: RegExpExecArray) => boolean): string {
-  const match = regex.exec(text);
-  if (!match || !replacer(match)) return text;
-  return consume(text, match.index, match.index + match[0].length);
-}
-
-function escapeRegExp(value: string): string {
+function escapeRe(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function normalizePhone(raw: string): string {
   let value = raw.replace(/plus/gi, "+").replace(/[^\d+]/g, "");
   if (value.startsWith("00")) value = `+${value.slice(2)}`;
-  if (/^\d{10,}$/.test(value) && /^(49|43|41)/.test(value)) {
-    value = `+${value}`;
-  }
-  if (value.startsWith("+") || (value.startsWith("0") && value.length >= 7)) return value;
-  return raw.replace(/\s+/g, " ").trim();
+  if (/^(49|43|41)\d{8,}$/.test(value)) value = `+${value}`;
+  return value.startsWith("+") || value.startsWith("0") ? value : raw.trim();
 }
 
-function phoneDigits(value: string | null | undefined): string {
-  return (value ?? "").replace(/\D/g, "");
+function digits(value: string): string {
+  return value.replace(/\D/g, "");
 }
 
 function phonesMatch(a: string, b: string): boolean {
-  const left = phoneDigits(a);
-  const right = phoneDigits(b);
-  if (left.length < 6 || right.length < 6) return false;
-  return left === right || left.endsWith(right.slice(-8)) || right.endsWith(left.slice(-8));
+  const x = digits(a);
+  const y = digits(b);
+  if (x.length < 6 || y.length < 6) return false;
+  return x === y || x.endsWith(y.slice(-8)) || y.endsWith(x.slice(-8));
 }
 
-function wordTokens(text: string) {
-  const tokens: { raw: string; folded: string; start: number; end: number }[] = [];
-  const regex = /[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-']*/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(text))) {
-    tokens.push({
-      raw: match[0],
-      folded: fold(match[0]),
-      start: match.index,
-      end: match.index + match[0].length,
-    });
-  }
-  return tokens;
+function wordsOf(name: string): string[] {
+  return fold(name).split(/[^a-z0-9]+/).filter((w) => w.length >= 2 && !STOP.has(w));
 }
 
-function isNameToken(token: string): boolean {
-  return token.length >= 2 && !NAME_STOP.has(token) && !/^\d+$/.test(token);
+function nameMatches(displayName: string, query: string): boolean {
+  const n = fold(displayName);
+  const q = fold(query.trim());
+  if (q.length < 2) return false;
+  return n === q || wordsOf(displayName).includes(q) || n.startsWith(`${q} `) || n.endsWith(` ${q}`);
 }
 
-function titleCaseName(value: string): string {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function entityWords(name: string): string[] {
-  return fold(name)
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word.length >= 2 && !STOPWORDS.has(word));
-}
-
-function nameMatchesQuery(displayName: string, query: string): boolean {
-  const foldedName = fold(displayName);
-  const foldedQuery = fold(query.trim());
-  if (!foldedQuery || foldedQuery.length < 2) return false;
-  if (foldedName === foldedQuery) return true;
-  const words = entityWords(displayName);
-  if (words.includes(foldedQuery)) return true;
-  return foldedName.startsWith(`${foldedQuery} `) || foldedName.endsWith(` ${foldedQuery}`);
-}
-
-function findNameMatches<T>(items: T[], query: string, nameOf: (item: T) => string): T[] {
-  return items.filter((item) => nameMatchesQuery(nameOf(item), query));
-}
-
-function uniqueById<T extends { id: string }>(items: T[]): T[] {
+function uniqueIds<T extends { id: string }>(items: T[]): T[] {
   const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
+  return items.filter((item) => (seen.has(item.id) ? false : (seen.add(item.id), true)));
 }
 
-function catalogHits<T>(
-  items: T[],
-  remaining: string,
-  nameOf: (item: T) => string,
-): { item: T; score: number }[] {
-  const foldedRemaining = fold(remaining);
-  const hits: { item: T; score: number }[] = [];
+function findInText<T extends { id: string }>(items: T[], text: string, nameOf: (item: T) => string): T[] {
+  const folded = fold(text);
+  const hits: T[] = [];
   for (const item of items) {
     const name = nameOf(item).trim();
     if (!name) continue;
-    const foldedName = fold(name);
-    const first = entityWords(name)[0];
-    const candidates = [foldedName, ...(first && first !== foldedName ? [first] : [])].filter(
-      (value) => value.length >= 2,
-    );
-    for (const candidate of candidates) {
-      const regex = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(candidate)}(?=[^a-z0-9]|$)`);
-      if (!regex.test(foldedRemaining)) continue;
-      const exact = foldedName === candidate;
-      hits.push({ item, score: exact ? 3 : 2 });
-      break;
+    const candidates = [fold(name), wordsOf(name)[0]].filter((c): c is string => Boolean(c && c.length >= 2));
+    for (const candidate of [...new Set(candidates)]) {
+      if (new RegExp(`(?:^|[^a-z0-9])${escapeRe(candidate)}(?=[^a-z0-9]|$)`).test(folded)) {
+        hits.push(item);
+        break;
+      }
     }
   }
-  hits.sort((a, b) => b.score - a.score);
-  return hits;
+  return uniqueIds(hits);
 }
 
-function consumeName(text: string, name: string): string {
-  const first = entityWords(name)[0];
-  if (!first) return text;
-  return text.replace(new RegExp(`\\b${escapeRegExp(first)}\\b`, "ig"), " ");
+function stripName(text: string, name: string): string {
+  const words = new Set(wordsOf(name));
+  if (!words.size) return text;
+  return text.replace(/[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-']*/g, (token) =>
+    words.has(fold(token)) ? " ".repeat(token.length) : token,
+  );
 }
 
-function extractPhone(text: string): { phone?: string; remaining: string } {
+function takePhone(text: string): { phone?: string; rest: string } {
   const labeled =
-    /\b(?:telefonnummer|telefon|tel\.?|handy|mobilnummer|mobil|nummer)\b\s*[:.]?\s*((?:plus\s*)?\+?\s*(?:00)?\s*(?:49|43|41)?[\d\s./-]{6,})/i;
-  const labeledMatch = labeled.exec(text);
-  if (labeledMatch) {
-    return {
-      phone: normalizePhone(labeledMatch[1]),
-      remaining: consume(text, labeledMatch.index, labeledMatch.index + labeledMatch[0].length),
-    };
+    /\b(?:telefonnummer|telefon|tel\.?|handy|mobil|nummer)\b\s*[:.]?\s*((?:plus\s*)?\+?[\d\s./-]{6,})/i.exec(text);
+  if (labeled) {
+    return { phone: normalizePhone(labeled[1]), rest: consume(text, labeled.index, labeled.index + labeled[0].length) };
   }
-  const standalone = /(?:plus\s*)?\+\s*(?:00)?\s*(?:49|43|41)[\d\s./-]{6,}|\b(?:00(?:49|43|41)|0\d{3,})[\d\s./-]{4,}\b/i;
-  const standaloneMatch = standalone.exec(text);
-  if (standaloneMatch) {
-    return {
-      phone: normalizePhone(standaloneMatch[0]),
-      remaining: consume(text, standaloneMatch.index, standaloneMatch.index + standaloneMatch[0].length),
-    };
-  }
-  return { remaining: text };
+  const open = /(?:plus\s*)?\+\s*(?:49|43|41)[\d\s./-]{6,}|\b0\d[\d\s./-]{6,}\b/i.exec(text);
+  if (!open) return { rest: text };
+  return { phone: normalizePhone(open[0]), rest: consume(text, open.index, open.index + open[0].length) };
 }
 
-function extractTime(text: string): { time?: string; remaining: string; confidence: number } {
-  const clock = /\b(?:um\s+)?(\d{1,2})\s*[:.]\s*(\d{2})(?:\s*uhr)?\b/i;
-  const clockMatch = clock.exec(text);
-  if (clockMatch) {
-    const hour = Number(clockMatch[1]);
-    const minute = Number(clockMatch[2]);
-    if (hour <= 23 && minute <= 59) {
-      return {
-        time: `${pad(hour)}:${pad(minute)}`,
-        remaining: consume(text, clockMatch.index, clockMatch.index + clockMatch[0].length),
-        confidence: 0.95,
-      };
+function takeTime(text: string): { time?: string; rest: string } {
+  const clock = /\b(?:um\s+)?(\d{1,2})\s*[:.]\s*(\d{2})(?:\s*uhr)?\b/i.exec(text);
+  if (clock) {
+    const h = Number(clock[1]);
+    const m = Number(clock[2]);
+    if (h <= 23 && m <= 59) {
+      return { time: `${pad(h)}:${pad(m)}`, rest: consume(text, clock.index, clock.index + clock[0].length) };
     }
   }
-  const uhr = /\b(?:um\s+)?(\d{1,2})\s*uhr(?:\s*(\d{1,2}))?\b/i;
-  const uhrMatch = uhr.exec(text);
-  if (uhrMatch) {
-    const hour = Number(uhrMatch[1]);
-    const minute = uhrMatch[2] ? Number(uhrMatch[2]) : 0;
-    if (hour <= 23 && minute <= 59) {
-      return {
-        time: `${pad(hour)}:${pad(minute)}`,
-        remaining: consume(text, uhrMatch.index, uhrMatch.index + uhrMatch[0].length),
-        confidence: 0.93,
-      };
+  const spoken = /\b(?:um\s+)?(\d{1,2})\s*uhr(?:\s*(\d{1,2}))?\b/i.exec(text);
+  if (spoken) {
+    const h = Number(spoken[1]);
+    const m = spoken[2] ? Number(spoken[2]) : 0;
+    if (h <= 23 && m <= 59) {
+      return { time: `${pad(h)}:${pad(m)}`, rest: consume(text, spoken.index, spoken.index + spoken[0].length) };
     }
   }
-  return { remaining: text, confidence: 0 };
+  return { rest: text };
 }
 
-function extractDuration(text: string): { durationMinutes?: number; remaining: string; confidence: number } {
-  const minutes = /\b(\d{1,3})\s*(?:minuten|minute|min)\b/i;
-  const minutesMatch = minutes.exec(text);
-  if (minutesMatch) {
-    return {
-      durationMinutes: Number(minutesMatch[1]),
-      remaining: consume(text, minutesMatch.index, minutesMatch.index + minutesMatch[0].length),
-      confidence: 0.92,
-    };
-  }
-  if (/\banderthalb\s+stunden?\b/i.test(text)) {
-    return {
-      durationMinutes: 90,
-      remaining: replaceFirst(text, /\banderthalb\s+stunden?\b/i, () => true),
-      confidence: 0.9,
-    };
-  }
-  if (/\beine\s+stunde\b/i.test(text)) {
-    return {
-      durationMinutes: 60,
-      remaining: replaceFirst(text, /\beine\s+stunde\b/i, () => true),
-      confidence: 0.9,
-    };
-  }
-  const hours = /\b(\d{1,2})\s*stunden?\b/i;
-  const hoursMatch = hours.exec(text);
-  if (hoursMatch) {
-    return {
-      durationMinutes: Number(hoursMatch[1]) * 60,
-      remaining: consume(text, hoursMatch.index, hoursMatch.index + hoursMatch[0].length),
-      confidence: 0.88,
-    };
-  }
-  return { remaining: text, confidence: 0 };
+function takeDuration(text: string): { minutes?: number; rest: string } {
+  const min = /\b(\d{1,3})\s*(?:minuten|minute|min)\b/i.exec(text);
+  if (min) return { minutes: Number(min[1]), rest: consume(text, min.index, min.index + min[0].length) };
+  const half = /\banderthalb\s+stunden?\b/i.exec(text);
+  if (half) return { minutes: 90, rest: consume(text, half.index, half.index + half[0].length) };
+  const one = /\beine\s+stunde\b/i.exec(text);
+  if (one) return { minutes: 60, rest: consume(text, one.index, one.index + one[0].length) };
+  const hrs = /\b(\d{1,2})\s*stunden?\b/i.exec(text);
+  if (hrs) return { minutes: Number(hrs[1]) * 60, rest: consume(text, hrs.index, hrs.index + hrs[0].length) };
+  return { rest: text };
 }
 
-function extractDate(
-  text: string,
-  now: Date,
-  timeZone: string,
-): { date?: string; remaining: string; confidence: number } {
-  const today = zonedYmd(now, timeZone);
-  let remaining = text;
+function takeDate(text: string, now: Date, timeZone: string): { date?: string; rest: string } {
+  const today = zonedToday(now, timeZone);
+  let rest = text;
   let date: string | undefined;
-  let confidence = 0;
-
-  const take = (start: number, end: number, next: { year: number; month: number; day: number }, conf: number) => {
+  const take = (start: number, end: number, next: { year: number; month: number; day: number }) => {
     if (date) return;
     date = dateKey(next.year, next.month, next.day);
-    confidence = conf;
-    remaining = consume(remaining, start, end);
+    rest = consume(rest, start, end);
   };
 
-  const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/;
-  const isoMatch = iso.exec(remaining);
-  if (isoMatch) {
-    take(
-      isoMatch.index,
-      isoMatch.index + isoMatch[0].length,
-      { year: Number(isoMatch[1]), month: Number(isoMatch[2]), day: Number(isoMatch[3]) },
-      0.97,
-    );
-  }
+  const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(rest);
+  if (iso) take(iso.index, iso.index + iso[0].length, { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) });
 
-  const numeric = /\b(\d{1,2})\.\s*(\d{1,2})\.(?:\s*(\d{2,4}))?\b/;
-  const numericMatch = numeric.exec(remaining);
-  if (numericMatch && !date) {
-    const day = Number(numericMatch[1]);
-    const month = Number(numericMatch[2]);
-    let year = numericMatch[3] ? Number(numericMatch[3]) : today.year;
+  const num = /\b(\d{1,2})\.\s*(\d{1,2})\.(?:\s*(\d{2,4}))?\b/.exec(rest);
+  if (num && !date) {
+    const day = Number(num[1]);
+    const month = Number(num[2]);
+    let year = num[3] ? Number(num[3]) : today.year;
     if (year < 100) year += 2000;
-    if (!numericMatch[3] && (month < today.month || (month === today.month && day < today.day))) {
-      year += 1;
-    }
-    take(numericMatch.index, numericMatch.index + numericMatch[0].length, { year, month, day }, 0.9);
+    if (!num[3] && (month < today.month || (month === today.month && day < today.day))) year += 1;
+    take(num.index, num.index + num[0].length, { year, month, day });
   }
 
-  const named = new RegExp(`\\b(\\d{1,2})\\.\\s*(${Object.keys(MONTHS).join("|")})(?:\\s*(\\d{4}))?\\b`, "i");
-  const namedMatch = named.exec(fold(remaining));
-  if (namedMatch && !date) {
-    const day = Number(namedMatch[1]);
-    const month = MONTHS[fold(namedMatch[2])];
-    let year = namedMatch[3] ? Number(namedMatch[3]) : today.year;
-    if (!namedMatch[3] && month < today.month) year += 1;
-    if (month) {
-      take(namedMatch.index, namedMatch.index + namedMatch[0].length, { year, month, day }, 0.9);
-    }
-  }
-
-  const relative: { pattern: RegExp; days: number; conf: number }[] = [
-    { pattern: /\bheute\b/i, days: 0, conf: 0.95 },
-    { pattern: /\buebermorgen\b|\bübermorgen\b/i, days: 2, conf: 0.95 },
-    { pattern: /\bmorgen\b/i, days: 1, conf: 0.95 },
-    { pattern: /\bin\s+einem\s+tag\b/i, days: 1, conf: 0.9 },
-    { pattern: /\bin\s+zwei\s+tagen\b/i, days: 2, conf: 0.9 },
+  const rel = [
+    { re: /\bheute\b/i, days: 0 },
+    { re: /\buebermorgen\b|\bübermorgen\b/i, days: 2 },
+    { re: /\bmorgen\b/i, days: 1 },
   ];
-  for (const item of relative) {
-    const match = item.pattern.exec(remaining);
-    if (match && !date) {
-      take(match.index, match.index + match[0].length, addDaysYmd(today, item.days), item.conf);
-    }
+  for (const item of rel) {
+    const m = item.re.exec(rest);
+    if (m && !date) take(m.index, m.index + m[0].length, addDays(today, item.days));
   }
 
-  const nextDays = /\bin\s+(\d{1,2})\s+tagen\b/i;
-  const nextDaysMatch = nextDays.exec(remaining);
-  if (nextDaysMatch && !date) {
-    take(
-      nextDaysMatch.index,
-      nextDaysMatch.index + nextDaysMatch[0].length,
-      addDaysYmd(today, Number(nextDaysMatch[1])),
-      0.9,
-    );
+  const wd = new RegExp(`\\b(${Object.keys(WEEKDAYS).join("|")})\\b`, "i").exec(fold(rest));
+  if (wd && !date) {
+    const target = WEEKDAYS[fold(wd[1])];
+    take(wd.index, wd.index + wd[0].length, addDays(today, (target - today.weekday + 7) % 7));
   }
 
-  const weekdayNames = Object.keys(WEEKDAYS).join("|");
-  const nextWeekdayRe = new RegExp(
-    `\\b(?:naechste[n]?|nächste[n]?|kommende[n]?)\\s+(${weekdayNames})\\b`,
-    "i",
-  );
-  const nextWeekdayMatch = nextWeekdayRe.exec(fold(remaining));
-  if (nextWeekdayMatch && !date) {
-    const target = WEEKDAYS[fold(nextWeekdayMatch[1])];
-    const next = nextWeekday(today, target);
-    const shifted = next.day === today.day && next.month === today.month ? addDaysYmd(next, 7) : next;
-    take(nextWeekdayMatch.index, nextWeekdayMatch.index + nextWeekdayMatch[0].length, shifted, 0.86);
+  const named = new RegExp(`\\b(\\d{1,2})\\.\\s*(${Object.keys(MONTHS).join("|")})(?:\\s*(\\d{4}))?\\b`, "i").exec(fold(rest));
+  if (named && !date) {
+    const day = Number(named[1]);
+    const month = MONTHS[fold(named[2])];
+    let year = named[3] ? Number(named[3]) : today.year;
+    if (!named[3] && month < today.month) year += 1;
+    if (month) take(named.index, named.index + named[0].length, { year, month, day });
   }
 
-  const weekdayRe = new RegExp(`\\b(${weekdayNames})\\b`, "i");
-  const weekdayMatch = weekdayRe.exec(fold(remaining));
-  if (weekdayMatch && !date) {
-    const target = WEEKDAYS[fold(weekdayMatch[1])];
-    take(weekdayMatch.index, weekdayMatch.index + weekdayMatch[0].length, nextWeekday(today, target), 0.84);
-  }
-
-  const abbrRe = new RegExp(`\\b(${Object.keys(WEEKDAY_ABBR).join("|")})\\b`, "i");
-  const abbrMatch = abbrRe.exec(fold(remaining));
-  if (abbrMatch && !date) {
-    const target = WEEKDAY_ABBR[fold(abbrMatch[1])];
-    take(abbrMatch.index, abbrMatch.index + abbrMatch[0].length, nextWeekday(today, target), 0.7);
-  }
-
-  return { date, remaining, confidence };
+  return { date, rest };
 }
 
-function extractLabeledName(text: string, pattern: RegExp): { name?: string; remaining: string } {
+function titleName(parts: string[]): string {
+  return parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join(" ");
+}
+
+function takeLabeledName(text: string, pattern: RegExp): { name?: string; rest: string } {
   const match = pattern.exec(text);
-  if (!match) return { remaining: text };
+  if (!match) return { rest: text };
   const after = text.slice(match.index + match[0].length);
-  const tokens = wordTokens(after);
+  const tokenRe = /[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-']*/g;
   const picked: string[] = [];
   let end = match.index + match[0].length;
-  for (const token of tokens) {
-    if (token.start > 2) break;
-    if (!isNameToken(token.folded)) break;
-    picked.push(token.raw);
-    end = match.index + match[0].length + token.end;
+  let cursor = 0;
+  let skipped = 0;
+  let token: RegExpExecArray | null;
+  while ((token = tokenRe.exec(after))) {
+    if (token.index - cursor > 12) break;
+    const folded = fold(token[0]);
+    cursor = token.index + token[0].length;
+    if (folded.length < 2 || NAME_STOP.has(folded) || STOP.has(folded)) {
+      skipped += 1;
+      if (skipped > 3 || picked.length) break;
+      continue;
+    }
+    picked.push(token[0]);
+    end = match.index + match[0].length + token.index + token[0].length;
     if (picked.length >= 3) break;
   }
-  if (!picked.length) return { remaining: text };
-  return {
-    name: titleCaseName(picked.join(" ")),
-    remaining: consume(text, match.index, end),
-  };
+  if (!picked.length) {
+    return { rest: consume(text, match.index, match.index + match[0].length) };
+  }
+  return { name: titleName(picked), rest: consume(text, match.index, end) };
 }
 
-function leftoverNote(text: string): string | undefined {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  if (!cleaned) return undefined;
-  const tokens = cleaned
-    .split(" ")
-    .map((token) => fold(token.replace(/[^\p{L}\p{N}-]+/gu, "")))
-    .filter((token) => token && !STOPWORDS.has(token) && !NAME_STOP.has(token) && token.length > 1);
-  if (!tokens.length) return undefined;
-  return cleaned;
+function leftoverPersonName(text: string, excludeNames: string[]): string | undefined {
+  const excluded = new Set(excludeNames.flatMap((name) => wordsOf(name)));
+  const tokens = text.match(/[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-']*/g) ?? [];
+  const picked: string[] = [];
+  for (const token of tokens) {
+    const folded = fold(token);
+    if (
+      folded.length < 2 ||
+      STOP.has(folded) ||
+      NAME_STOP.has(folded) ||
+      excluded.has(folded) ||
+      /^\d+$/.test(folded)
+    ) {
+      continue;
+    }
+    picked.push(token);
+    if (picked.length >= 3) break;
+  }
+  return picked.length ? titleName(picked) : undefined;
 }
 
-function applyAnswers(
+function resolveCustomer(
   parsed: ParsedAppointmentIntent,
   catalog: IntentCatalog,
-  answers: Record<string, string>,
-  fieldConfidence: Record<string, number>,
+  rest: string,
   questions: ClarifyingQuestion[],
-) {
-  const teacherId = answers.teacher || answers.teacherId;
-  if (teacherId) {
-    const teacher = catalog.teachers.find((item) => item.id === teacherId);
-    if (teacher) {
-      parsed.teacherId = teacher.id;
-      parsed.teacherName = teacher.displayName;
-      fieldConfidence.teacherId = 1;
-      removeQuestion(questions, "teacher");
-    }
-  }
-  const lessonTypeId = answers.lessonType || answers.lessonTypeId;
-  if (lessonTypeId) {
-    const lessonType = catalog.lessonTypes.find((item) => item.id === lessonTypeId);
-    if (lessonType) {
-      parsed.lessonTypeId = lessonType.id;
-      parsed.lessonTypeName = lessonType.displayName;
-      fieldConfidence.lessonTypeId = 1;
-      removeQuestion(questions, "lessonType");
-    }
-  }
-  const resourceId = answers.resource || answers.resourceId;
-  if (resourceId) {
-    const resource = catalog.resources.find((item) => item.id === resourceId);
-    if (resource) {
-      parsed.resourceId = resource.id;
-      parsed.resourceName = resource.name;
-      fieldConfidence.resourceId = 1;
-      removeQuestion(questions, "resource");
-    }
-  }
-  const customerValue = answers.customer || answers.customerId;
-  if (customerValue === "new") {
-    parsed.customerId = undefined;
-    parsed.createCustomer = true;
-    fieldConfidence.customerId = 1;
-    removeQuestion(questions, "customer");
-  } else if (customerValue) {
-    const customer = catalog.customers.find((item) => item.id === customerValue);
-    if (customer) {
-      parsed.customerId = customer.id;
-      parsed.customerName = customer.displayName;
+  fieldConfidence: Record<string, number>,
+): string {
+  if (!parsed.customerName) {
+    const teacherWords = new Set(parsed.teacherName ? wordsOf(parsed.teacherName) : []);
+    const hits = findInText(catalog.customers, rest, (item) => item.displayName).filter((customer) => {
+      const words = wordsOf(customer.displayName);
+      return words.some((word) => !teacherWords.has(word));
+    });
+    if (hits.length === 1) {
+      parsed.customerId = hits[0].id;
+      parsed.customerName = hits[0].displayName;
       parsed.createCustomer = false;
-      fieldConfidence.customerId = 1;
-      removeQuestion(questions, "customer");
+      fieldConfidence.customerId = 0.88;
+      return stripName(rest, hits[0].displayName);
+    }
+    if (hits.length > 1) {
+      questions.push({
+        id: "customer",
+        prompt: "Welcher Passagier ist gemeint?",
+        options: hits.slice(0, 5).map((item) => ({ value: item.id, label: item.displayName })),
+      });
     }
   }
+
+  if (!parsed.customerName) {
+    const leftover = leftoverPersonName(rest, [
+      parsed.teacherName ?? "",
+      parsed.lessonTypeName ?? "",
+      parsed.resourceName ?? "",
+      ...catalog.teachers.map((item) => item.displayName),
+      ...catalog.lessonTypes.map((item) => item.displayName),
+      ...catalog.resources.map((item) => item.name),
+    ]);
+    if (leftover) {
+      parsed.customerName = leftover;
+      fieldConfidence.customerName = 0.72;
+      rest = stripName(rest, leftover);
+    }
+  }
+
+  if (parsed.phone && !parsed.customerId && !parsed.customerName) {
+    const byPhone = catalog.customers.filter((customer) =>
+      (customer.phones ?? []).some((phone) => phonesMatch(parsed.phone!, phone.e164 || phone.raw || "")),
+    );
+    if (byPhone.length === 1) {
+      parsed.customerId = byPhone[0].id;
+      parsed.customerName = byPhone[0].displayName;
+      parsed.createCustomer = false;
+      fieldConfidence.customerId = 0.9;
+    }
+  }
+
+  if (parsed.customerName) {
+    const hits = catalog.customers.filter((customer) => nameMatches(customer.displayName, parsed.customerName!));
+    if (hits.length === 1) {
+      parsed.customerId = hits[0].id;
+      parsed.customerName = hits[0].displayName;
+      parsed.createCustomer = false;
+      fieldConfidence.customerId = 0.9;
+      rest = stripName(rest, hits[0].displayName);
+    } else if (hits.length > 1) {
+      questions.push({
+        id: "customer",
+        prompt: `Welcher Passagier „${parsed.customerName}“ ist gemeint?`,
+        options: [
+          ...hits.slice(0, 4).map((item) => ({ value: item.id, label: item.displayName })),
+          { value: "new", label: `Neu anlegen: ${parsed.customerName}` },
+        ],
+      });
+    } else {
+      parsed.createCustomer = true;
+      parsed.customerId = undefined;
+      fieldConfidence.customerId = 0.8;
+    }
+  }
+
+  return rest;
 }
 
-function removeQuestion(questions: ClarifyingQuestion[], id: string) {
-  const index = questions.findIndex((question) => question.id === id);
+function dropQuestion(questions: ClarifyingQuestion[], id: string) {
+  const index = questions.findIndex((q) => q.id === id);
   if (index >= 0) questions.splice(index, 1);
 }
 
@@ -669,163 +455,143 @@ export function parseAppointmentIntent(
   const original = rawText.replace(/\s+/g, " ").trim();
   const parsed: ParsedAppointmentIntent = { contactText: original };
   const fieldConfidence: Record<string, number> = {};
-  const clarifyingQuestions: ClarifyingQuestion[] = [];
+  const questions: ClarifyingQuestion[] = [];
   const now = catalog.now ?? new Date();
+  let rest = original.replace(/\bplus\b/gi, "+");
 
-  let working = original.replace(/\bplus\b/gi, "+");
-
-  const phoneHit = extractPhone(working);
-  working = phoneHit.remaining;
-  if (phoneHit.phone) {
-    parsed.phone = phoneHit.phone;
+  const phone = takePhone(rest);
+  rest = phone.rest;
+  if (phone.phone) {
+    parsed.phone = phone.phone;
     fieldConfidence.phone = 0.9;
   }
 
-  const dateHit = extractDate(working, now, catalog.timeZone);
-  working = dateHit.remaining;
-  if (dateHit.date) {
-    parsed.date = dateHit.date;
-    fieldConfidence.date = dateHit.confidence;
+  const date = takeDate(rest, now, catalog.timeZone);
+  rest = date.rest;
+  if (date.date) {
+    parsed.date = date.date;
+    fieldConfidence.date = 0.95;
   }
 
-  const timeHit = extractTime(working);
-  working = timeHit.remaining;
-  if (timeHit.time) {
-    parsed.time = timeHit.time;
-    fieldConfidence.time = timeHit.confidence;
+  const time = takeTime(rest);
+  rest = time.rest;
+  if (time.time) {
+    parsed.time = time.time;
+    fieldConfidence.time = 0.93;
   }
 
-  const durationHit = extractDuration(working);
-  working = durationHit.remaining;
-  if (durationHit.durationMinutes) {
-    parsed.durationMinutes = durationHit.durationMinutes;
-    fieldConfidence.durationMinutes = durationHit.confidence;
+  const duration = takeDuration(rest);
+  rest = duration.rest;
+  if (duration.minutes) {
+    parsed.durationMinutes = duration.minutes;
+    fieldConfidence.durationMinutes = 0.9;
   }
 
-  const passengerHit = extractLabeledName(working, PASSENGER_LABEL);
-  working = passengerHit.remaining;
-  if (passengerHit.name) {
-    parsed.customerName = passengerHit.name;
+  const passenger = takeLabeledName(rest, PASSENGER_RE);
+  rest = passenger.rest;
+  if (passenger.name) {
+    parsed.customerName = passenger.name;
     fieldConfidence.customerName = 0.86;
   }
 
-  const roleLabels = [
-    catalog.teacherLabel,
-    "lehrer",
-    "lehrerin",
-    "pilot",
-    "pilotin",
-    "fluglehrer",
-    "fluglehrerin",
-    "instructor",
-    "trainer",
-  ]
+  const roles = [catalog.teacherLabel, "lehrer", "lehrerin", "pilot", "pilotin", "fluglehrer", "trainer"]
     .map((label) => fold(label).trim())
-    .filter((label, index, all) => label && all.indexOf(label) === index);
-  const teacherLabelRe = new RegExp(`\\b(?:${roleLabels.map(escapeRegExp).join("|")})\\b`, "i");
-  const teacherHit = extractLabeledName(working, teacherLabelRe);
-  working = teacherHit.remaining;
+    .filter((label, i, all) => label && all.indexOf(label) === i);
+  const teacherLabel = takeLabeledName(rest, new RegExp(`\\b(?:${roles.map(escapeRe).join("|")})\\b`, "i"));
+  rest = teacherLabel.rest;
 
-  const lessonHits = uniqueById(
-    catalogHits(catalog.lessonTypes, working, (item) => item.displayName).map((hit) => hit.item),
-  );
+  const lessonHits = findInText(catalog.lessonTypes, rest, (item) => item.displayName);
   if (lessonHits.length === 1) {
     parsed.lessonTypeId = lessonHits[0].id;
     parsed.lessonTypeName = lessonHits[0].displayName;
     fieldConfidence.lessonTypeId = 0.9;
-    working = consumeName(working, lessonHits[0].displayName);
+    rest = stripName(rest, lessonHits[0].displayName);
   } else if (lessonHits.length > 1) {
-    clarifyingQuestions.push({
+    questions.push({
       id: "lessonType",
       prompt: "Welche Terminart ist gemeint?",
       options: lessonHits.slice(0, 5).map((item) => ({ value: item.id, label: item.displayName })),
     });
-    fieldConfidence.lessonTypeId = 0.4;
   }
 
-  const resourceHits = uniqueById(
-    catalogHits(
-      catalog.resources.map((item) => ({ id: item.id, displayName: item.name })),
-      working,
-      (item) => item.displayName,
-    ).map((hit) => hit.item),
+  const resourceHits = findInText(
+    catalog.resources.map((item) => ({ id: item.id, displayName: item.name })),
+    rest,
+    (item) => item.displayName,
   );
   if (resourceHits.length === 1) {
     parsed.resourceId = resourceHits[0].id;
     parsed.resourceName = resourceHits[0].displayName;
     fieldConfidence.resourceId = 0.85;
-    working = consumeName(working, resourceHits[0].displayName);
-  } else if (resourceHits.length > 1) {
-    clarifyingQuestions.push({
-      id: "resource",
-      prompt: "Welche Ressource ist gemeint?",
-      options: resourceHits.slice(0, 5).map((item) => ({ value: item.id, label: item.displayName })),
-    });
-    fieldConfidence.resourceId = 0.4;
+    rest = stripName(rest, resourceHits[0].displayName);
   }
 
-  let teacherQuery = teacherHit.name;
-  let teacherHits = teacherQuery
-    ? findNameMatches(catalog.teachers, teacherQuery, (item) => item.displayName)
-    : uniqueById(catalogHits(catalog.teachers, working, (item) => item.displayName).map((hit) => hit.item));
-
+  const teacherHits = teacherLabel.name
+    ? catalog.teachers.filter((item) => nameMatches(item.displayName, teacherLabel.name!))
+    : findInText(catalog.teachers, rest, (item) => item.displayName);
   if (teacherHits.length === 1) {
     parsed.teacherId = teacherHits[0].id;
     parsed.teacherName = teacherHits[0].displayName;
-    fieldConfidence.teacherId = teacherHit.name ? 0.92 : 0.82;
-    working = consumeName(working, teacherHits[0].displayName);
+    fieldConfidence.teacherId = teacherLabel.name ? 0.92 : 0.82;
+    rest = stripName(rest, teacherHits[0].displayName);
   } else if (teacherHits.length > 1) {
-    clarifyingQuestions.push({
+    questions.push({
       id: "teacher",
-      prompt: `Welcher „${teacherQuery || catalog.teacherLabel}“ ist gemeint?`,
+      prompt: `Welcher „${teacherLabel.name || catalog.teacherLabel}“ ist gemeint?`,
       options: teacherHits.slice(0, 5).map((item) => ({ value: item.id, label: item.displayName })),
     });
-    fieldConfidence.teacherId = 0.4;
   }
 
-  if (parsed.phone && !parsed.customerId) {
-    const byPhone = catalog.customers.filter((customer) =>
-      (customer.phones ?? []).some((phone) => phonesMatch(parsed.phone!, phone.e164 || phone.raw || "")),
-    );
-    if (byPhone.length === 1 && !parsed.customerName) {
-      parsed.customerId = byPhone[0].id;
-      parsed.customerName = byPhone[0].displayName;
-      fieldConfidence.customerId = 0.88;
+  rest = resolveCustomer(parsed, catalog, rest, questions, fieldConfidence);
+
+  const teacherAnswer = answers.teacher || answers.teacherId;
+  if (teacherAnswer) {
+    const teacher = catalog.teachers.find((t) => t.id === teacherAnswer);
+    if (teacher) {
+      parsed.teacherId = teacher.id;
+      parsed.teacherName = teacher.displayName;
+      fieldConfidence.teacherId = 1;
+      dropQuestion(questions, "teacher");
     }
   }
-
-  if (parsed.customerName) {
-    const customerHits = findNameMatches(catalog.customers, parsed.customerName, (item) => item.displayName);
-    if (customerHits.length === 1) {
-      parsed.customerId = customerHits[0].id;
-      parsed.customerName = customerHits[0].displayName;
+  const lessonAnswer = answers.lessonType || answers.lessonTypeId;
+  if (lessonAnswer) {
+    const lesson = catalog.lessonTypes.find((t) => t.id === lessonAnswer);
+    if (lesson) {
+      parsed.lessonTypeId = lesson.id;
+      parsed.lessonTypeName = lesson.displayName;
+      fieldConfidence.lessonTypeId = 1;
+      dropQuestion(questions, "lessonType");
+    }
+  }
+  const customerAnswer = answers.customer || answers.customerId;
+  if (customerAnswer === "new") {
+    parsed.customerId = undefined;
+    parsed.createCustomer = true;
+    fieldConfidence.customerId = 1;
+    dropQuestion(questions, "customer");
+  } else if (customerAnswer) {
+    const customer = catalog.customers.find((c) => c.id === customerAnswer);
+    if (customer) {
+      parsed.customerId = customer.id;
+      parsed.customerName = customer.displayName;
       parsed.createCustomer = false;
-      fieldConfidence.customerId = 0.9;
-    } else if (customerHits.length > 1) {
-      clarifyingQuestions.push({
-        id: "customer",
-        prompt: `Welcher Passagier „${parsed.customerName}“ ist gemeint?`,
-        options: [
-          ...customerHits.slice(0, 4).map((item) => ({ value: item.id, label: item.displayName })),
-          { value: "new", label: `Neu anlegen: ${parsed.customerName}` },
-        ],
-      });
-      fieldConfidence.customerId = 0.4;
-    } else {
-      parsed.createCustomer = true;
-      fieldConfidence.customerId = 0.78;
+      fieldConfidence.customerId = 1;
+      dropQuestion(questions, "customer");
     }
   }
 
-  applyAnswers(parsed, catalog, answers, fieldConfidence, clarifyingQuestions);
-
-  const note = leftoverNote(working);
-  if (note) parsed.note = note;
+  const leftover = rest.replace(/\s+/g, " ").trim();
+  const leftoverTokens = leftover
+    .split(" ")
+    .map((t) => fold(t.replace(/[^\p{L}\p{N}-]+/gu, "")))
+    .filter((t) => t && !STOP.has(t) && !NAME_STOP.has(t) && t.length > 1);
+  if (leftoverTokens.length) parsed.note = leftover;
 
   return {
     parsed,
     fieldConfidence,
-    clarifyingQuestions: clarifyingQuestions.slice(0, 3),
+    clarifyingQuestions: questions.slice(0, 3),
     suggestedDefaults: {},
   };
 }
