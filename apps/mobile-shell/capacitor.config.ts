@@ -1,6 +1,33 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { CapacitorConfig } from "@capacitor/cli";
 
-const serverUrl = process.env.CAPACITOR_SERVER_URL;
+function loadEnvFile(file: string) {
+  if (!existsSync(file)) return;
+  for (const raw of readFileSync(file, "utf8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+// cap sync läuft in apps/mobile-shell; Root-.env liegt zwei Ebenen höher.
+loadEnvFile(resolve(process.cwd(), "../../.env"));
+loadEnvFile(resolve(process.cwd(), ".env"));
+
+const serverUrl = process.env.CAPACITOR_SERVER_URL?.replace(/\/+$/, "");
 
 const config: CapacitorConfig = {
   appId: "at.avelom.app",

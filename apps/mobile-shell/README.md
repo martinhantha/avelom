@@ -11,18 +11,25 @@ Die Avelom-UI bleibt Nuxt (`apps/web`). Diese App ist nur die native Hülle: And
 ## Erstes Setup
 
 ```bash
-# 1. Web-App lokal starten
+# 1. In der Repo-Root-.env setzen, z. B.:
+#    CAPACITOR_SERVER_URL=http://10.0.2.2:3000          # Android-Emulator
+#    CAPACITOR_SERVER_URL=http://192.168.x.x:3000       # physisches Gerät (LAN-IP)
+
+# 2. Web-App lokal starten (fürs Gerät: --host 0.0.0.0)
 pnpm dev:web
 
-# 2. Native Projekte einmalig anlegen (erzeugt android/ und ios/)
+# 3. Native Projekte einmalig anlegen (erzeugt android/ und ios/)
 cd apps/mobile-shell
-CAPACITOR_SERVER_URL=http://192.168.x.x:3000 pnpm cap:add:android
-CAPACITOR_SERVER_URL=http://192.168.x.x:3000 pnpm cap:add:ios   # nur auf macOS
+pnpm cap:add:android
+pnpm cap:add:ios   # nur auf macOS
 pnpm cap:sync
 pnpm cap:open:android
 ```
 
-`192.168.x.x` ist die LAN-IP des Rechners, nicht `localhost` (das wäre das Telefon selbst).
+`capacitor.config.ts` liest `CAPACITOR_SERVER_URL` aus der Root-`.env`. Ohne diese Variable (und ohne Prefix auf `cap:sync`) zeigt die App die Platzhalterseite „nicht gesetzt“.
+
+- **Android-Emulator:** `http://10.0.2.2:3000` — `10.0.2.2` ist der Host-Rechner, nicht `localhost` und oft auch nicht `192.168.x.x`.
+- **Physisches Gerät:** `http://192.168.x.x:3000` (LAN-IP des Rechners, nicht `localhost`). Nuxt muss mit `--host 0.0.0.0` lauschen.
 
 Nach dem ersten `cap add android` in `android/app/src/main/AndroidManifest.xml` nichts extra für Call-Log tun — das Plugin bringt `READ_CALL_LOG` mit.
 
@@ -36,7 +43,8 @@ Nach `cap add ios` in `ios/App/App/Info.plist`:
 ## Produktion
 
 ```bash
-CAPACITOR_SERVER_URL=https://app.example.com pnpm cap:sync
+# Production-URL in .env setzen, dann:
+pnpm cap:sync
 ```
 
 Store-Builds: Android Studio / Xcode. `READ_CALL_LOG` ist bei Google Play eine **eingeschränkte** Permission — internes APK/MDM ist der einfachere Weg; Play Store braucht eine Kernfunktions-Begründung.
