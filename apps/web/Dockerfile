@@ -4,7 +4,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
 FROM base AS deps
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/
 COPY apps/worker/package.json ./apps/worker/
 COPY packages ./packages
@@ -13,7 +13,6 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
-ENV NODE_ENV=production
 RUN pnpm exec prisma generate
 RUN pnpm --filter @avelom/web build
 
