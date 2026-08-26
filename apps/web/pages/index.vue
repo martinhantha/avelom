@@ -24,7 +24,7 @@ interface AppointmentListItem {
   } | null;
 }
 
-const { user, primaryTenant, teacherLabel, resourcesEnabled } = useAuth();
+const { user, primaryTenant, teacherLabel, resourcesEnabled, canAccessWorkspace } = useAuth();
 const isSuperadmin = computed(() => Boolean(user.value?.isSuperadmin));
 
 const overview = ref<SuperadminOverview | null>(null);
@@ -410,7 +410,14 @@ async function deleteAppointment(appointment: AppointmentListItem) {
       <UButton block size="xl" color="primary" icon="i-lucide-zap" @click="openAssistant">
         Schnellerfassung &amp; Assistent
       </UButton>
-      <UButton to="/conflict-demo" block size="xl" variant="outline" icon="i-lucide-git-merge">
+      <UButton
+        v-if="canAccessWorkspace"
+        to="/conflict-demo"
+        block
+        size="xl"
+        variant="outline"
+        icon="i-lucide-git-merge"
+      >
         Konflikt / Alternativen
       </UButton>
       <UButton size="xl" variant="ghost" color="neutral" icon="i-lucide-refresh-cw" :loading="appointmentsLoading" @click="loadAppointments">

@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { TenantRole } from "@prisma/client";
 import { prisma } from "~/server/utils/prisma";
 import { requireSuperadmin } from "~/server/utils/authz";
-import { assertEmailAvailable, normalizeEmail } from "~/server/utils/members";
+import { assertEmailAvailable, ensureTeacherProfile, normalizeEmail } from "~/server/utils/members";
 
 export default defineEventHandler(async (event) => {
   await requireSuperadmin(event);
@@ -44,8 +44,28 @@ export default defineEventHandler(async (event) => {
             }
           : undefined,
     },
-    select: { id: true, email: true, name: true, isSuperadmin: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isSuperadmin: true,
+      memberships: { select: { id: true, tenantId: true, role: true } },
+    },
   });
 
-  return user;
+  for (const membership of user.memberships) {
+    await ensureTeacherProfile({
+      tenantId: membership.tenantId,
+      membershipId: membership.id,
+      role: membership.role,
+      displayName: user.name?.trim() || user.email,
+    });
+  }
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    isSuperadmin: user.isSuperadmin,
+  };
 });

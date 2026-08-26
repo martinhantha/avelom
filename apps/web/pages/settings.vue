@@ -24,7 +24,7 @@ interface AvailabilityRule {
   priority: number;
 }
 
-const { user, primaryTenant, refreshSession } = useAuth();
+const { user, primaryTenant, refreshSession, canManageTenant } = useAuth();
 const { device, setCallHintsOptIn } = useDeviceCapabilities();
 const {
   isNative,
@@ -41,8 +41,7 @@ const callHintsEnabled = ref(false);
 const callHintsSaving = ref(false);
 
 const isSuperadmin = computed(() => Boolean(user.value?.isSuperadmin));
-const isTenantAdmin = computed(() => primaryTenant.value?.role === "ADMIN");
-const canEdit = computed(() => isSuperadmin.value || isTenantAdmin.value);
+const canEdit = canManageTenant;
 
 const tenantSettingsSaving = ref(false);
 const useDefaultDurationLocal = ref(true);
@@ -135,11 +134,13 @@ function saveTeacherLabel() {
 }
 
 const tabs = computed(() => {
-  const t = [
-    { id: "account", label: "Account", icon: "i-lucide-user" },
-    { id: "lesson-types", label: "Termintypen", icon: "i-lucide-tag" },
-    { id: "availability", label: "Standard-Uhrzeiten", icon: "i-lucide-clock" },
-  ];
+  const t = [{ id: "account", label: "Account", icon: "i-lucide-user" }];
+  if (canEdit.value) {
+    t.push(
+      { id: "lesson-types", label: "Termintypen", icon: "i-lucide-tag" },
+      { id: "availability", label: "Standard-Uhrzeiten", icon: "i-lucide-clock" },
+    );
+  }
   if (isSuperadmin.value) {
     t.push({ id: "users", label: "Benutzer", icon: "i-lucide-users" });
   }
@@ -511,9 +512,17 @@ watch(selectedTeacherId, () => {
   loadRules();
 });
 
+watch(canEdit, (ok) => {
+  if (!ok && (activeTab.value === "lesson-types" || activeTab.value === "availability")) {
+    activeTab.value = "account";
+  }
+});
+
 onMounted(() => {
-  loadLessonTypes();
-  loadTeachers();
+  if (canEdit.value) {
+    loadLessonTypes();
+    loadTeachers();
+  }
   callHintsEnabled.value = isCallHintsOptIn();
   void refreshStatus();
 });
@@ -525,14 +534,12 @@ onMounted(() => {
       <p class="text-sm text-muted font-medium">Avelom · Settings</p>
       <h1 class="text-2xl font-semibold tracking-tight">Einstellungen</h1>
       <p class="text-sm text-neutral-600 dark:text-neutral-400">
+        Account und Gerät
         <template v-if="canEdit">
-          Du hast Schreibrechte
+          · Mandanten-Optionen
           <UBadge color="primary" variant="subtle" class="ml-1">
             {{ isSuperadmin ? "Superadmin" : "Admin" }}
           </UBadge>
-        </template>
-        <template v-else>
-          Nur lesender Zugriff. Bearbeitung benötigt Rolle <strong>ADMIN</strong> oder <strong>Superadmin</strong>.
         </template>
       </p>
     </div>
@@ -654,7 +661,7 @@ onMounted(() => {
         </div>
       </UCard>
 
-      <UCard class="lg:col-span-2">
+      <UCard v-if="canEdit" class="lg:col-span-2">
         <template #header><h2 class="font-medium">Mandanten-Optionen</h2></template>
         <div class="flex items-start justify-between gap-4">
           <div class="text-sm">
@@ -679,9 +686,6 @@ onMounted(() => {
             <div class="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 dark:bg-neutral-700 dark:after:bg-neutral-200" />
           </label>
         </div>
-        <p v-if="!canEdit" class="text-xs text-neutral-500 mt-2">
-          Nur Tenant-Admin oder Superadmin kann diese Einstellung ändern.
-        </p>
 
         <div class="flex items-start justify-between gap-4 mt-6 pt-4 border-t border-neutral-200 dark:border-neutral-800">
           <div class="text-sm">
@@ -759,7 +763,7 @@ onMounted(() => {
       </UCard>
     </section>
 
-    <section v-else-if="activeTab === 'lesson-types'" class="grid gap-4 lg:grid-cols-3">
+    <section v-else-if="activeTab === 'lesson-types' && canEdit" class="grid gap-4 lg:grid-cols-3">
       <UCard class="lg:col-span-2">
         <template #header>
           <div class="flex items-center justify-between gap-3">
@@ -810,7 +814,7 @@ onMounted(() => {
       </UCard>
     </section>
 
-    <section v-else-if="activeTab === 'availability'" class="space-y-4">
+    <section v-else-if="activeTab === 'availability' && canEdit" class="space-y-4">
       <UCard>
         <template #header><h2 class="font-medium">{{ teacherLabelLocal }} wählen</h2></template>
         <div v-if="!teachers.length" class="text-sm text-neutral-500">Noch keine {{ teacherLabelLocal }} hinterlegt.</div>

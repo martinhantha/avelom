@@ -661,9 +661,6 @@ watch(
             <template v-if="canEdit">
               · <UBadge color="primary" variant="subtle" class="ml-1">ADMIN</UBadge>
             </template>
-            <template v-else>
-              · nur lesender Zugriff
-            </template>
           </template>
         </p>
       </div>
@@ -684,9 +681,9 @@ watch(
           />
         </UButton>
         <UButton
+          v-if="canEdit"
           icon="i-lucide-user-plus"
           color="primary"
-          :disabled="!canEdit"
           @click="openAdd"
         >
           Benutzer hinzufügen
@@ -765,11 +762,11 @@ watch(
               <span v-else class="text-xs text-neutral-500 italic">Superadmin ohne Mandanten-Mitgliedschaft</span>
             </div>
           </div>
-          <div class="flex items-center gap-2 shrink-0">
+          <div v-if="canEdit" class="flex items-center gap-2 shrink-0">
             <select
               :value="u.roleInActive ?? ''"
               class="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1 text-sm"
-              :disabled="!canEdit || savingId === u.id || !primaryTenant"
+              :disabled="savingId === u.id || !primaryTenant"
               @change="changeRole(u, ($event.target as HTMLSelectElement).value as TenantRole)"
             >
               <option value="" disabled>—</option>
@@ -782,7 +779,7 @@ watch(
               icon="i-lucide-pencil"
               aria-label="Bearbeiten"
               title="Bearbeiten"
-              :disabled="!canEdit || (!isSuperadmin && !u.roleInActive)"
+              :disabled="!isSuperadmin && !u.roleInActive"
               @click="openEdit(u)"
             >
               <span class="hidden sm:inline">Bearbeiten</span>
@@ -809,7 +806,6 @@ watch(
               icon="i-lucide-user-minus"
               aria-label="Aus Mandant entfernen"
               title="Aus Mandant entfernen"
-              :disabled="!canEdit"
               :loading="savingId === u.id"
               @click="removeFromTenant(u)"
             >

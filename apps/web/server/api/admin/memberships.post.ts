@@ -1,6 +1,7 @@
 import { TenantRole } from "@prisma/client";
 import { prisma } from "~/server/utils/prisma";
 import { requireSuperadmin } from "~/server/utils/authz";
+import { ensureTeacherProfile } from "~/server/utils/members";
 
 export default defineEventHandler(async (event) => {
   await requireSuperadmin(event);
@@ -27,8 +28,26 @@ export default defineEventHandler(async (event) => {
       deletedAt: null,
       deletedByUserId: null,
     },
-    select: { id: true, tenantId: true, userId: true, role: true },
+    select: {
+      id: true,
+      tenantId: true,
+      userId: true,
+      role: true,
+      user: { select: { name: true, email: true } },
+    },
   });
 
-  return membership;
+  await ensureTeacherProfile({
+    tenantId: membership.tenantId,
+    membershipId: membership.id,
+    role: membership.role,
+    displayName: membership.user.name?.trim() || membership.user.email,
+  });
+
+  return {
+    id: membership.id,
+    tenantId: membership.tenantId,
+    userId: membership.userId,
+    role: membership.role,
+  };
 });

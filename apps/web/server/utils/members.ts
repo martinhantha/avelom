@@ -50,6 +50,57 @@ function normalizeName(value: unknown): string | null {
   return name.length ? name : null;
 }
 
+const teacherRoles: TenantRole[] = [TenantRole.ADMIN, TenantRole.STAFF];
+
+export async function ensureTeacherProfile(params: {
+  tenantId: string;
+  membershipId: string;
+  role: TenantRole;
+  displayName: string;
+}) {
+  if (!teacherRoles.includes(params.role)) return;
+  const displayName = params.displayName.trim() || "Lehrer";
+  const existing = await prisma.teacherProfile.findUnique({
+    where: { membershipId: params.membershipId },
+    select: { id: true, deletedAt: true },
+  });
+  if (!existing) {
+    await prisma.teacherProfile.create({
+      data: {
+        tenantId: params.tenantId,
+        membershipId: params.membershipId,
+        displayName,
+      },
+    });
+    return;
+  }
+  if (existing.deletedAt) {
+    await prisma.teacherProfile.update({
+      where: { id: existing.id },
+      data: { deletedAt: null, deletedByUserId: null, displayName, tenantId: params.tenantId },
+    });
+  }
+}
+
+export async function ensureTeacherProfilesForTenant(tenantId: string) {
+  const memberships = await prisma.membership.findMany({
+    where: { tenantId, deletedAt: null, role: { in: teacherRoles } },
+    select: {
+      id: true,
+      role: true,
+      user: { select: { name: true, email: true } },
+    },
+  });
+  for (const membership of memberships) {
+    await ensureTeacherProfile({
+      tenantId,
+      membershipId: membership.id,
+      role: membership.role,
+      displayName: membership.user.name?.trim() || membership.user.email,
+    });
+  }
+}
+
 export async function listTenantMembers(tenantId: string) {
   const memberships = await prisma.membership.findMany({
     where: { tenantId, deletedAt: null, user: { deletedAt: null } },
@@ -122,6 +173,13 @@ export async function addTenantMember(tenantId: string, rawBody: unknown) {
         data: { tenantId, userId: user.id, role },
         select: { id: true, role: true, createdAt: true },
       });
+
+  await ensureTeacherProfile({
+    tenantId,
+    membershipId: membership.id,
+    role: membership.role,
+    displayName: user.name?.trim() || user.email,
+  });
 
   return {
     membershipId: membership.id,
@@ -216,6 +274,13 @@ export async function updateTenantMember(
   if (!refreshed) {
     throwNotFound("Mitgliedschaft nicht gefunden", { tenantId, userId });
   }
+
+  await ensureTeacherProfile({
+    tenantId,
+    membershipId: refreshed.id,
+    role: refreshed.role,
+    displayName: refreshed.user.name?.trim() || refreshed.user.email,
+  });
 
   return {
     membershipId: refreshed.id,

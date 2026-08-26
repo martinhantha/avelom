@@ -12,6 +12,7 @@ import {
   throwVersionConflict,
 } from "~/server/utils/api-errors";
 import { assertUuid } from "~/server/utils/authz";
+import { ensureTeacherProfilesForTenant } from "~/server/utils/members";
 
 const BUSINESS_TIME_ZONE = "Europe/Rome";
 const activeAppointmentStatuses = [
@@ -1304,6 +1305,7 @@ export async function softDeleteAvailabilityException(
 
 export async function getSchedulingOptions(tenantId: string, query: { q?: string }) {
   const q = query.q?.trim();
+  await ensureTeacherProfilesForTenant(tenantId);
   const [teachers, resources, lessonTypes, customers, tenant] = await Promise.all([
     prisma.teacherProfile.findMany({
       where: { tenantId, deletedAt: null, membership: { deletedAt: null } },

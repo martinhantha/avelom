@@ -159,12 +159,7 @@ watch(() => primaryTenant.value?.tenantId, load);
         </h1>
         <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
           Mandant <strong>{{ primaryTenant?.tenantName || "—" }}</strong>
-          <template v-if="canEdit">
-            · <UBadge color="primary" variant="subtle" class="ml-1">{{ isSuperadmin ? 'SUPERADMIN' : 'ADMIN' }}</UBadge>
-          </template>
-          <template v-else>
-            · nur lesender Zugriff
-          </template>
+          <UBadge v-if="canEdit" color="primary" variant="subtle" class="ml-1">{{ isSuperadmin ? 'SUPERADMIN' : 'ADMIN' }}</UBadge>
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -184,9 +179,9 @@ watch(() => primaryTenant.value?.tenantId, load);
           />
         </UButton>
         <UButton
+          v-if="canEdit"
           icon="i-lucide-plus"
           color="primary"
-          :disabled="!canEdit"
           @click="openCreate"
         >
           Termintyp hinzufügen
@@ -227,13 +222,12 @@ watch(() => primaryTenant.value?.tenantId, load);
               </span>
             </p>
           </div>
-          <div class="flex items-center gap-2 shrink-0">
+          <div v-if="canEdit" class="flex items-center gap-2 shrink-0">
             <UButton
               size="sm"
               variant="ghost"
               color="neutral"
               icon="i-lucide-pencil"
-              :disabled="!canEdit"
               @click="openEdit(item)"
             >
               Bearbeiten
@@ -243,7 +237,6 @@ watch(() => primaryTenant.value?.tenantId, load);
               variant="ghost"
               color="error"
               icon="i-lucide-trash-2"
-              :disabled="!canEdit"
               :loading="savingId === item.id"
               @click="remove(item)"
             >

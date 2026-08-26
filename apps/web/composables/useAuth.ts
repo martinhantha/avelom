@@ -8,6 +8,14 @@ export function useAuth() {
   const primaryTenant = computed(() => memberships.value[0] ?? null);
   const teacherLabel = computed(() => primaryTenant.value?.teacherLabel?.trim() || "Lehrer");
   const resourcesEnabled = computed(() => primaryTenant.value?.resourcesEnabled ?? true);
+  const canManageTenant = computed(
+    () => Boolean(user.value?.isSuperadmin || primaryTenant.value?.role === "ADMIN"),
+  );
+  const canAccessWorkspace = computed(() => {
+    if (user.value?.isSuperadmin) return true;
+    const role = primaryTenant.value?.role;
+    return role === "ADMIN" || role === "STAFF";
+  });
 
   async function refreshSession() {
     try {
@@ -48,6 +56,8 @@ export function useAuth() {
     primaryTenant,
     teacherLabel,
     resourcesEnabled,
+    canManageTenant,
+    canAccessWorkspace,
     login,
     logout,
     refreshSession,
