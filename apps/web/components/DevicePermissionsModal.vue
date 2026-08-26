@@ -1,0 +1,58 @@
+<script setup lang="ts">
+const {
+  open,
+  requesting,
+  isNative,
+  microphoneGranted,
+  contactsGranted,
+  allGranted,
+  anyDenied,
+  requestNow,
+  openAppSettings,
+} = useNativePermissions({ autoPrompt: true });
+
+function permissionLabel(granted: boolean) {
+  return granted ? "Erlaubt" : "Noch nicht erlaubt";
+}
+</script>
+
+<template>
+  <UModal v-if="isNative" v-model:open="open" :ui="{ content: 'max-w-md' }">
+    <template #header>
+      <h2 class="font-medium">Geräteberechtigungen</h2>
+    </template>
+    <template #body>
+      <p class="text-sm text-neutral-600 dark:text-neutral-400">
+        Avelom braucht Mikrofon (Spracheingabe) und Kontakte (Adressbuch). Die Systemabfrage erscheint sofort.
+      </p>
+      <ul class="mt-4 space-y-2 text-sm">
+        <li class="flex items-center justify-between gap-3">
+          <span>Mikrofon</span>
+          <UBadge :color="microphoneGranted ? 'success' : 'neutral'" variant="subtle">
+            {{ permissionLabel(microphoneGranted) }}
+          </UBadge>
+        </li>
+        <li class="flex items-center justify-between gap-3">
+          <span>Kontakte</span>
+          <UBadge :color="contactsGranted ? 'success' : 'neutral'" variant="subtle">
+            {{ permissionLabel(contactsGranted) }}
+          </UBadge>
+        </li>
+      </ul>
+      <p v-if="anyDenied" class="mt-3 text-xs text-neutral-500">
+        Wenn Android nichts mehr anzeigt, die Rechte in den App-Einstellungen einschalten.
+      </p>
+    </template>
+    <template #footer>
+      <div class="flex flex-wrap justify-end gap-2 w-full">
+        <UButton variant="ghost" color="neutral" @click="open = false">Später</UButton>
+        <UButton v-if="anyDenied" variant="soft" color="neutral" icon="i-lucide-settings-2" @click="openAppSettings">
+          Einstellungen
+        </UButton>
+        <UButton color="primary" icon="i-lucide-shield-check" :loading="requesting" :disabled="allGranted" @click="requestNow">
+          Jetzt erlauben
+        </UButton>
+      </div>
+    </template>
+  </UModal>
+</template>

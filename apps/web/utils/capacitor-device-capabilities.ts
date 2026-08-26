@@ -3,13 +3,14 @@ import { Contacts, PhoneType } from "@capacitor-community/contacts";
 import {
   WebDeviceCapabilities,
   isCallHintsPluginAvailable,
+  withAvelomContactMeta,
   type ContactWritePayload,
   type DeviceCapabilities,
   type DeviceFeatureFlags,
   type DevicePlatform,
   type PickedContact,
 } from "@avelom/device-capabilities";
-import { CallHints } from "@avelom/capacitor-call-hints";
+import { AvelomDevice, CallHints } from "@avelom/capacitor-call-hints";
 
 function nativePlatform(): DevicePlatform {
   return Capacitor.getPlatform() === "ios" ? "ios" : "android";
@@ -52,25 +53,52 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
     return [];
   }
 
+  override async requestMicrophonePermission(): Promise<boolean> {
+    try {
+      const status = await AvelomDevice.requestMicrophone();
+      if (status.microphone !== "granted") return false;
+    } catch {
+      return false;
+    }
+    await super.requestMicrophonePermission();
+    return true;
+  }
+
   override async saveOrUpdateDeviceContact(payload: ContactWritePayload): Promise<void> {
+    const labeled = withAvelomContactMeta(payload);
+    try {
+      await AvelomDevice.saveLocalContact({
+        displayName: labeled.displayName.trim() || "Avelom Kontakt",
+        phone: labeled.phoneE164?.trim() || undefined,
+        note: labeled.note,
+        organization: labeled.organization,
+      });
+      return;
+    } catch {
+      // Fall through to the community plugin / vCard.
+    }
     try {
       const permission = await Contacts.requestPermissions();
       if (permission.contacts !== "granted" && permission.contacts !== "limited") {
-        await super.saveOrUpdateDeviceContact(payload);
+        await super.saveOrUpdateDeviceContact(labeled);
         return;
       }
-      const given = payload.displayName.trim() || "Avelom Kontakt";
+      const given = labeled.displayName.trim() || "Avelom Kontakt";
       await Contacts.createContact({
         contact: {
           name: { given },
-          phones: payload.phoneE164
-            ? [{ type: PhoneType.Mobile, number: payload.phoneE164, isPrimary: true }]
+          organization: {
+            company: labeled.organization ?? "Avelom",
+            jobTitle: "Avelom-App",
+          },
+          phones: labeled.phoneE164
+            ? [{ type: PhoneType.Mobile, number: labeled.phoneE164, isPrimary: true }]
             : [],
-          note: payload.note?.trim() || null,
+          note: labeled.note?.trim() || null,
         },
       });
     } catch {
-      await super.saveOrUpdateDeviceContact(payload);
+      await super.saveOrUpdateDeviceContact(labeled);
     }
   }
 }

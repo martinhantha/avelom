@@ -4,6 +4,11 @@ export { WebDeviceCapabilities } from "./web.js";
 export { AndroidCallHintCapabilities } from "./android-call-hints.js";
 export { toVCard, downloadVCard } from "./vcard.js";
 export {
+  AVELOM_CONTACT_NOTE,
+  AVELOM_CONTACT_ORGANIZATION,
+  withAvelomContactMeta,
+} from "./contact-meta.js";
+export {
   detectDevicePlatform,
   isNativeCapacitor,
   isCallHintsPluginAvailable,

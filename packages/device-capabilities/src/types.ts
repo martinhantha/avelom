@@ -10,6 +10,8 @@ export interface ContactWritePayload {
   displayName: string;
   phoneE164?: string;
   note?: string;
+  /** Shown as company / organisation on the device contact. */
+  organization?: string;
 }
 
 export interface PickedContact {
@@ -41,6 +43,7 @@ export interface DeviceCapabilities {
   readonly features: DeviceFeatureFlags;
 
   startSpeechToText(): Promise<SpeechRecognitionResult>;
+  requestMicrophonePermission(): Promise<boolean>;
   takePhoto(): Promise<Blob | null>;
   requestPushPermission(): Promise<NotificationPermission | "unsupported">;
   pickContact(): Promise<PickedContact | null>;

@@ -26,6 +26,17 @@ interface AvailabilityRule {
 
 const { user, primaryTenant, refreshSession } = useAuth();
 const { device, setCallHintsOptIn } = useDeviceCapabilities();
+const {
+  isNative,
+  requesting: permissionsRequesting,
+  microphoneGranted,
+  contactsGranted,
+  allGranted,
+  anyDenied,
+  refreshStatus,
+  requestNow,
+  openAppSettings,
+} = useNativePermissions();
 const callHintsEnabled = ref(false);
 const callHintsSaving = ref(false);
 
@@ -504,6 +515,7 @@ onMounted(() => {
   loadLessonTypes();
   loadTeachers();
   callHintsEnabled.value = isCallHintsOptIn();
+  void refreshStatus();
 });
 </script>
 
@@ -575,7 +587,49 @@ onMounted(() => {
               <div class="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 dark:bg-neutral-700 dark:after:bg-neutral-200" />
             </label>
           </div>
-          <p class="text-xs text-neutral-500">
+          <div v-if="isNative" class="space-y-3 pt-2 border-t border-neutral-200 dark:border-neutral-800">
+            <p class="font-medium">Mikrofon & Kontakte</p>
+            <p class="text-xs text-neutral-500">
+              Spracheingabe und Adressbuch. Kontakte werden lokal unter „Avelom“ gespeichert, nicht im Google-Konto.
+            </p>
+            <ul class="text-sm space-y-1">
+              <li class="flex items-center justify-between gap-3">
+                <span>Mikrofon</span>
+                <UBadge :color="microphoneGranted ? 'success' : 'neutral'" variant="subtle">
+                  {{ microphoneGranted ? "Erlaubt" : "Nicht erlaubt" }}
+                </UBadge>
+              </li>
+              <li class="flex items-center justify-between gap-3">
+                <span>Kontakte</span>
+                <UBadge :color="contactsGranted ? 'success' : 'neutral'" variant="subtle">
+                  {{ contactsGranted ? "Erlaubt" : "Nicht erlaubt" }}
+                </UBadge>
+              </li>
+            </ul>
+            <div class="flex flex-wrap gap-2">
+              <UButton
+                size="sm"
+                color="primary"
+                icon="i-lucide-shield-check"
+                :loading="permissionsRequesting"
+                :disabled="allGranted"
+                @click="requestNow"
+              >
+                Jetzt erlauben
+              </UButton>
+              <UButton
+                v-if="anyDenied || !allGranted"
+                size="sm"
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-settings-2"
+                @click="openAppSettings"
+              >
+                App-Einstellungen
+              </UButton>
+            </div>
+          </div>
+          <p v-else class="text-xs text-neutral-500">
             Kontakte speichern: in der App direkt ins Adressbuch, im Browser als vCard-Download.
           </p>
         </div>

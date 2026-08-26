@@ -17,7 +17,7 @@ export default defineNuxtConfig({
   },
   vite: {
     optimizeDeps: {
-      include: ["@capacitor/core", "@capacitor-community/contacts"],
+      include: ["@capacitor/core", "@capacitor-community/contacts", "@avelom/capacitor-call-hints"],
     },
     resolve: {
       dedupe: [

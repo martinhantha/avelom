@@ -94,6 +94,7 @@ const links = computed(() => {
         <main class="min-w-0">
           <slot />
         </main>
+        <DevicePermissionsModal />
       </div>
     </div>
   </div>

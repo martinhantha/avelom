@@ -44,6 +44,19 @@ export class WebDeviceCapabilities implements DeviceCapabilities {
     throw new Error("Speech not available on this platform build.");
   }
 
+  async requestMicrophonePermission(): Promise<boolean> {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      return true;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      for (const track of stream.getTracks()) track.stop();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async takePhoto(): Promise<Blob | null> {
     return null;
   }

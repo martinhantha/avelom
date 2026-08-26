@@ -9,6 +9,7 @@ const ssrSafe: DeviceCapabilities = {
   platform: "web",
   features: { pickContact: false, saveContact: false, callHints: false },
   startSpeechToText: () => fallback.startSpeechToText(),
+  requestMicrophonePermission: () => fallback.requestMicrophonePermission(),
   takePhoto: () => fallback.takePhoto(),
   requestPushPermission: () => fallback.requestPushPermission(),
   pickContact: () => fallback.pickContact(),

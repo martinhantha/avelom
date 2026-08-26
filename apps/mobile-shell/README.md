@@ -33,13 +33,17 @@ pnpm cap:open:android
 - **Android-Emulator (lokal):** `http://10.0.2.2:3000` — `10.0.2.2` ist der Host-Rechner, nicht `localhost` und oft auch nicht `192.168.x.x`.
 - **Physisches Gerät (lokal):** `http://192.168.x.x:3000` (LAN-IP des Rechners, nicht `localhost`). Nuxt muss mit `--host 0.0.0.0` lauschen.
 
-Nach dem ersten `cap add android` in `android/app/src/main/AndroidManifest.xml` nichts extra für Call-Log tun — das Plugin bringt `READ_CALL_LOG` mit.
+Nach dem ersten `cap add android` in `android/app/src/main/AndroidManifest.xml` nichts extra für Call-Log oder Mikrofon tun — das Plugin bringt `READ_CALL_LOG`, `RECORD_AUDIO` und `WRITE_CONTACTS` mit. Kontakte werden lokal unter dem Konto **Avelom** gespeichert (nicht Google).
 
 Nach `cap add ios` in `ios/App/App/Info.plist`:
 
 ```xml
 <key>NSContactsUsageDescription</key>
 <string>Avelom speichert oder liest Kontakte nur, wenn du das ausdrücklich auslöst.</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>Avelom nutzt das Mikrofon nur für die Sprachaufnahme in der Schnellerfassung.</string>
+<key>NSSpeechRecognitionUsageDescription</key>
+<string>Avelom wandelt deine Sprache in Text um, um Termine vorzubereiten.</string>
 ```
 
 ## Produktion
@@ -55,7 +59,7 @@ Store-Builds: Android Studio / Xcode. `READ_CALL_LOG` ist bei Google Play eine *
 
 | Plugin | Zweck |
 |--------|--------|
-| `@capacitor-community/contacts` | Kontakt wählen / aufs Gerät schreiben |
-| `@avelom/capacitor-call-hints` | Android: letzte Nummern, nur clientseitig, Opt-in in Einstellungen |
+| `@capacitor-community/contacts` | Kontakt wählen; Fallback beim Schreiben |
+| `@avelom/capacitor-call-hints` | Android: letzte Nummern, Mikrofon-Permission, lokale Avelom-Kontakte |
 
 iOS liefert für Call-Hints immer eine leere Liste (OS-Limit).

@@ -69,7 +69,6 @@ async function saveDeviceContact() {
     await device.value.saveOrUpdateDeviceContact({
       displayName: resolveAppointmentDisplayName(props.appointment),
       phoneE164: phone.value,
-      note: "Avelom",
     });
     contactSaveState.value = "saved";
   } catch {

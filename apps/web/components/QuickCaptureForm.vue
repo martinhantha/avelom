@@ -219,7 +219,9 @@ function setupSpeech() {
   recognition.onerror = (event) => {
     speechError.value =
       event.error === "not-allowed"
-        ? "Mikrofon-Zugriff verweigert – bitte im Browser erlauben."
+        ? device.value.platform === "web"
+          ? "Mikrofon-Zugriff verweigert – bitte im Browser erlauben."
+          : "Mikrofon-Zugriff verweigert – bitte in den App-Einstellungen erlauben."
         : event.error === "no-speech"
           ? "Keine Sprache erkannt."
           : event.message || event.error || "Sprachaufnahme fehlgeschlagen.";
@@ -236,11 +238,19 @@ function setupSpeech() {
   };
 }
 
-function toggleSpeech() {
+async function toggleSpeech() {
   if (!recognition) return;
   speechError.value = "";
   if (speechListening.value) {
     recognition.stop();
+    return;
+  }
+  const micOk = await device.value.requestMicrophonePermission();
+  if (!micOk) {
+    speechError.value =
+      device.value.platform === "web"
+        ? "Mikrofon-Zugriff verweigert – bitte im Browser erlauben."
+        : "Mikrofon-Zugriff verweigert – bitte in den App-Einstellungen erlauben.";
     return;
   }
   speechTextBase = text.value.trim();
@@ -270,7 +280,7 @@ function toggleVoiceAssistant() {
   }
   Object.keys(parseAnswers).forEach((key) => delete parseAnswers[key]);
   parseAfterListen = true;
-  toggleSpeech();
+  void toggleSpeech();
 }
 
 function applyParsed(parsed: ParsedAppointmentIntent) {
@@ -425,12 +435,11 @@ async function saveDeviceContact() {
     await device.value.saveOrUpdateDeviceContact({
       displayName: passengerName.value.trim() || text.value.trim() || "Avelom Kontakt",
       phoneE164: form.phone.trim() || undefined,
-      note: "Avelom",
     });
     deviceContactHint.value =
       device.value.platform === "web"
-        ? "vCard heruntergeladen — auf dem Telefon importieren."
-        : "Kontakt auf dem Gerät gespeichert.";
+        ? "vCard heruntergeladen — auf dem Telefon importieren (Organisation: Avelom)."
+        : "Kontakt lokal unter „Avelom“ gespeichert, nicht im Google-Konto.";
   } catch {
     deviceContactHint.value = "Kontakt konnte nicht gespeichert werden.";
   } finally {

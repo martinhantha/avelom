@@ -21,6 +21,10 @@ export class NoOpDeviceCapabilities implements DeviceCapabilities {
     throw new Error("Speech not available on this platform build.");
   }
 
+  async requestMicrophonePermission(): Promise<boolean> {
+    return false;
+  }
+
   async takePhoto(): Promise<Blob | null> {
     return null;
   }

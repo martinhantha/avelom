@@ -5,7 +5,19 @@
 5    <uses-sdk android:minSdkVersion="23" />
 6
 7    <uses-permission android:name="android.permission.READ_CALL_LOG" />
-7-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:3:5-72
-7-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:3:22-69
-8
-9</manifest>
+7-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:2:5-72
+7-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:2:22-69
+8    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+8-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:3:5-71
+8-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:3:22-68
+9    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+9-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:4:5-80
+9-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:4:22-77
+10    <uses-permission android:name="android.permission.READ_CONTACTS" />
+10-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:5:5-72
+10-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:5:22-69
+11    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+11-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:6:5-73
+11-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:6:22-70
+12
+13</manifest>

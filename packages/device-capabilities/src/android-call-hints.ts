@@ -32,6 +32,10 @@ export class AndroidCallHintCapabilities implements DeviceCapabilities {
     return this.inner.startSpeechToText();
   }
 
+  requestMicrophonePermission(): Promise<boolean> {
+    return this.inner.requestMicrophonePermission();
+  }
+
   takePhoto(): Promise<Blob | null> {
     return this.inner.takePhoto();
   }
