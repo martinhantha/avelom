@@ -19,5 +19,8 @@
 11    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 11-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:6:5-73
 11-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:6:22-70
-12
-13</manifest>
+12    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+12-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:7:5-77
+12-->/Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:7:22-74
+13
+14</manifest>
