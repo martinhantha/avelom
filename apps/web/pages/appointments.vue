@@ -169,13 +169,11 @@ async function loadAppointments() {
           to: toIso,
           page: isCalendar ? 1 : page.value,
           pageSize: isCalendar ? 500 : pageSize.value,
-          sort: isCalendar ? "asc" : "desc",
+          sort: "asc",
         },
       },
     );
-    appointments.value = isCalendar
-      ? response.data
-      : [...response.data].sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
+    appointments.value = response.data;
     pagination.value = response.pagination;
   } catch (e: unknown) {
     const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
