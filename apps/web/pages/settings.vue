@@ -971,7 +971,7 @@ onMounted(() => {
                 <UInput v-model="ruleForm.endTime" type="time" :disabled="!canEdit" />
               </UFormField>
             </div>
-            <UFormField label="Priorität">
+            <UFormField label="Priorität" hint="Höhere Zahl = wird zuerst als nächster freier Termin vorgeschlagen">
               <UInput v-model.number="ruleForm.priority" type="number" :disabled="!canEdit" />
             </UFormField>
             <div class="flex gap-2">

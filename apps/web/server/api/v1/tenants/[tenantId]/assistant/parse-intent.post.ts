@@ -3,6 +3,7 @@ import { requireTenantAccess } from "~/server/utils/authz";
 import { prisma } from "~/server/utils/prisma";
 import { throwValidation } from "~/server/utils/api-errors";
 import { parseAppointmentIntent } from "~/server/utils/parse-intent";
+import { suggestNextPrioritySlot } from "~/server/utils/scheduling";
 
 export default defineEventHandler(async (event) => {
   const access = await requireTenantAccess(event, getRouterParam(event, "tenantId"));
@@ -50,7 +51,7 @@ export default defineEventHandler(async (event) => {
     }),
   ]);
 
-  return parseAppointmentIntent(
+  const result = parseAppointmentIntent(
     text,
     {
       timeZone: "Europe/Rome",
@@ -66,4 +67,38 @@ export default defineEventHandler(async (event) => {
     },
     body.answers && typeof body.answers === "object" ? body.answers : {},
   );
+
+  if (!result.parsed.time) {
+    const lessonType = lessonTypes.find((item) => item.id === result.parsed.lessonTypeId);
+    const slot = await suggestNextPrioritySlot(access.tenant.id, {
+      teacherId: result.parsed.teacherId,
+      resourceId: result.parsed.resourceId,
+      durationMin: result.parsed.durationMinutes ?? lessonType?.defaultDurationMin ?? 60,
+      onDate: result.parsed.date,
+    });
+    if (slot) {
+      result.parsed.date = slot.date;
+      result.parsed.time = slot.time;
+      result.fieldConfidence.date = result.fieldConfidence.date ?? 0.6;
+      result.fieldConfidence.time = 0.6;
+      if (!result.parsed.teacherId && slot.teacherId) {
+        result.parsed.teacherId = slot.teacherId;
+        result.parsed.teacherName = slot.teacherName ?? undefined;
+        result.fieldConfidence.teacherId = 0.55;
+      }
+      if (!result.parsed.resourceId && slot.resourceId) {
+        result.parsed.resourceId = slot.resourceId;
+        result.fieldConfidence.resourceId = 0.5;
+      }
+      result.suggestedDefaults = {
+        slotSource: "priority",
+        priority: slot.priority,
+        date: slot.date,
+        time: slot.time,
+        teacherName: slot.teacherName,
+      };
+    }
+  }
+
+  return result;
 });

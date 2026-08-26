@@ -1,5 +1,5 @@
 import type { CallHint } from "@avelom/device-capabilities";
-import type { PermissionState } from "@capacitor/core";
+import type { PermissionState, PluginListenerHandle } from "@capacitor/core";
 
 export interface CallHintsPermissionStatus {
   callLog: PermissionState;
@@ -26,6 +26,16 @@ export interface AvelomDevicePlugin {
   requestMicrophone(): Promise<AvelomDevicePermissionStatus>;
   openAppSettings(): Promise<void>;
   showLocalNotification(options: { title: string; body: string; id?: string }): Promise<void>;
+  startSpeechRecognition(options?: { lang?: string }): Promise<void>;
+  stopSpeechRecognition(): Promise<void>;
+  addListener(
+    eventName: "speechTranscript",
+    listenerFunc: (event: { transcript: string; isFinal: boolean }) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: "speechError",
+    listenerFunc: (event: { message: string }) => void,
+  ): Promise<PluginListenerHandle>;
   saveLocalContact(options: {
     displayName: string;
     phone?: string;

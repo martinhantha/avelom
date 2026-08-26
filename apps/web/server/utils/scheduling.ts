@@ -1684,6 +1684,213 @@ function slotIsFree(input: {
   return true;
 }
 
+export type SuggestedPrioritySlot = {
+  date: string;
+  time: string;
+  startsAt: string;
+  endsAt: string;
+  teacherId: string | null;
+  teacherName: string | null;
+  resourceId: string | null;
+  priority: number;
+};
+
+export async function suggestNextPrioritySlot(
+  tenantId: string,
+  input: {
+    teacherId?: string | null;
+    resourceId?: string | null;
+    durationMin?: number;
+    onDate?: string | null;
+  },
+): Promise<SuggestedPrioritySlot | null> {
+  const durationMin = Math.max(15, input.durationMin ?? 60);
+  const durationMs = durationMin * 60_000;
+  const nowParts = getBusinessParts(new Date());
+  const searchStartDate =
+    input.onDate && /^\d{4}-\d{2}-\d{2}$/.test(input.onDate) && input.onDate >= nowParts.date
+      ? input.onDate
+      : nowParts.date;
+  const searchEndDate = addDaysToDateString(searchStartDate, input.onDate ? 3 : 14);
+  const searchFrom = fromBusinessDateTime(searchStartDate, "00:00");
+  const searchTo = fromBusinessDateTime(addDaysToDateString(searchEndDate, 1), "00:00");
+
+  const [teachers, resources, rules, exceptions, nearby, tenant] = await Promise.all([
+    prisma.teacherProfile.findMany({
+      where: { tenantId, deletedAt: null, membership: { deletedAt: null } },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" },
+    }),
+    prisma.resource.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, name: true, capacity: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.availabilityRule.findMany({
+      where: { tenantId, deletedAt: null },
+      select: {
+        teacherId: true,
+        weekday: true,
+        startTime: true,
+        endTime: true,
+        priority: true,
+      },
+    }),
+    prisma.availabilityException.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { teacherId: true, type: true, startsOn: true, endsOn: true },
+    }),
+    prisma.appointment.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        status: { in: activeAppointmentStatuses },
+        startsAt: { lt: searchTo },
+        endsAt: { gt: searchFrom },
+      },
+      select: { id: true, startsAt: true, endsAt: true, teacherId: true, resourceId: true },
+    }),
+    prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { defaultTeacherId: true, resourcesEnabled: true },
+    }),
+  ]);
+
+  const resourcesEnabled = tenant?.resourcesEnabled ?? true;
+  const resourceId = resourcesEnabled
+    ? input.resourceId && resources.some((resource) => resource.id === input.resourceId)
+      ? input.resourceId
+      : (resources[0]?.id ?? null)
+    : null;
+
+  const preferredTeacherIds: string[] = [];
+  const pushTeacher = (id: string | null | undefined) => {
+    if (!id || preferredTeacherIds.includes(id)) return;
+    if (teachers.some((teacher) => teacher.id === id)) preferredTeacherIds.push(id);
+  };
+  pushTeacher(input.teacherId);
+  pushTeacher(tenant?.defaultTeacherId);
+  for (const teacher of teachers) pushTeacher(teacher.id);
+
+  const rulesByTeacher = new Map<string, { weekday: number; startTime: string; endTime: string }[]>();
+  const priorityRulesByTeacher = new Map<
+    string,
+    { weekday: number; startTime: string; endTime: string; priority: number }[]
+  >();
+  for (const rule of rules) {
+    const plain = rulesByTeacher.get(rule.teacherId) ?? [];
+    plain.push({ weekday: rule.weekday, startTime: rule.startTime, endTime: rule.endTime });
+    rulesByTeacher.set(rule.teacherId, plain);
+    const ranked = priorityRulesByTeacher.get(rule.teacherId) ?? [];
+    ranked.push({
+      weekday: rule.weekday,
+      startTime: rule.startTime,
+      endTime: rule.endTime,
+      priority: rule.priority,
+    });
+    priorityRulesByTeacher.set(rule.teacherId, ranked);
+  }
+  const exceptionsByTeacher = new Map<
+    string,
+    { type: AvailabilityExceptionType; startsOn: Date; endsOn: Date }[]
+  >();
+  for (const exception of exceptions) {
+    const list = exceptionsByTeacher.get(exception.teacherId) ?? [];
+    list.push({ type: exception.type, startsOn: exception.startsOn, endsOn: exception.endsOn });
+    exceptionsByTeacher.set(exception.teacherId, list);
+  }
+  const resourceCapacity = new Map<string, number>(
+    resources.map((resource) => [resource.id, resource.capacity]),
+  );
+  const checkBase = {
+    excludeAppointmentId: "",
+    nearby,
+    resourceCapacity,
+    rulesByTeacher,
+    exceptionsByTeacher,
+  };
+
+  const teacherName = (id: string) => teachers.find((teacher) => teacher.id === id)?.displayName ?? null;
+
+  const trySlot = (
+    teacherId: string,
+    startsAt: Date,
+    priority: number,
+  ): SuggestedPrioritySlot | null => {
+    const endsAt = new Date(startsAt.getTime() + durationMs);
+    if (
+      !slotIsFree({
+        ...checkBase,
+        startsAt,
+        endsAt,
+        teacherId,
+        resourceId,
+      })
+    ) {
+      return null;
+    }
+    const parts = getBusinessParts(startsAt);
+    return {
+      date: parts.date,
+      time: parts.time,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      teacherId,
+      teacherName: teacherName(teacherId),
+      resourceId,
+      priority,
+    };
+  };
+
+  const windowsFor = (teacherId: string, weekday: number, minPriority: number | null) => {
+    const teacherRules = priorityRulesByTeacher.get(teacherId) ?? [];
+    if (!teacherRules.length) {
+      if (minPriority !== null && minPriority !== 0) return [];
+      return [{ startTime: "08:00", endTime: "18:00", priority: 0 }];
+    }
+    return teacherRules
+      .filter((rule) => rule.weekday === weekday)
+      .filter((rule) => minPriority === null || rule.priority === minPriority)
+      .sort((left, right) => right.priority - left.priority || left.startTime.localeCompare(right.startTime));
+  };
+
+  const scanDay = (
+    teacherId: string,
+    date: string,
+    minPriority: number | null,
+  ): SuggestedPrioritySlot | null => {
+    const weekday = getBusinessParts(fromBusinessDateTime(date, "12:00")).weekday;
+    for (const range of windowsFor(teacherId, weekday, minPriority)) {
+      const startMin = parseMinutes(range.startTime);
+      const endMin = parseMinutes(range.endTime);
+      for (let slot = startMin; slot + durationMin <= endMin; slot += 15) {
+        const startsAt = fromBusinessDateTime(date, formatMinutes(slot));
+        const found = trySlot(teacherId, startsAt, range.priority);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const priorities: number[] = [
+    ...new Set(rules.map((rule: { priority: number }) => Number(rule.priority) || 0)),
+  ].sort((left, right) => right - left);
+  const priorityLevels: Array<number | null> = rules.length ? priorities : [null];
+  const dayCount = input.onDate ? 4 : 15;
+
+  for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
+    const date = addDaysToDateString(searchStartDate, dayOffset);
+    for (const priority of priorityLevels) {
+      for (const teacherId of preferredTeacherIds) {
+        const found = scanDay(teacherId, date, priority);
+        if (found) return found;
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function suggestAppointmentAlternatives(
   tenantId: string,
   appointmentIdInput: string | undefined,

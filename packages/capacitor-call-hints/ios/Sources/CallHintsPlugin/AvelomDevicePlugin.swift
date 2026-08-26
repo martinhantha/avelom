@@ -14,7 +14,9 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "requestMicrophone", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openAppSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveLocalContact", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "showLocalNotification", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "showLocalNotification", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startSpeechRecognition", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "stopSpeechRecognition", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func checkPermissions(_ call: CAPPluginCall) {
@@ -94,6 +96,14 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func showLocalNotification(_ call: CAPPluginCall) {
+        call.resolve()
+    }
+
+    @objc func startSpeechRecognition(_ call: CAPPluginCall) {
+        call.reject("startSpeechRecognition is Android-only")
+    }
+
+    @objc func stopSpeechRecognition(_ call: CAPPluginCall) {
         call.resolve()
     }
 

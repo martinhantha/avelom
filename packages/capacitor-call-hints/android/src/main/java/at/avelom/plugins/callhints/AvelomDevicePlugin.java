@@ -14,8 +14,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.ContactsContract;
 import android.provider.Settings;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import android.provider.ContactsContract.CommonDataKinds.Note;
 import android.provider.ContactsContract.CommonDataKinds.Organization;
 import android.provider.ContactsContract.CommonDataKinds.Phone;
@@ -45,6 +51,12 @@ public class AvelomDevicePlugin extends Plugin {
     private static final String ACCOUNT_TYPE = "at.avelom.app";
     private static final String GOOGLE_ACCOUNT_PREFIX = "com.google";
     private static final String NOTIFICATION_CHANNEL_ID = "avelom_appointments";
+    private static final long SPEECH_RESTART_DELAY_MS = 350L;
+
+    private SpeechRecognizer speechRecognizer;
+    private boolean speechListening;
+    private String speechLanguage = "de-DE";
+    private final Handler speechHandler = new Handler(Looper.getMainLooper());
 
     @PluginMethod
     public void checkPermissions(PluginCall call) {
@@ -329,5 +341,208 @@ public class AvelomDevicePlugin extends Plugin {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    @PluginMethod
+    public void startSpeechRecognition(PluginCall call) {
+        String lang = call.getString("lang", "de-DE");
+        if (lang != null && !lang.isEmpty()) {
+            speechLanguage = lang;
+        }
+        getActivity().runOnUiThread(() -> {
+            try {
+                if (!SpeechRecognizer.isRecognitionAvailable(getContext())) {
+                    call.reject("Spracherkennung ist auf diesem Gerät nicht verfügbar");
+                    return;
+                }
+                speechListening = true;
+                ensureSpeechRecognizer();
+                startSpeechListening();
+                call.resolve();
+            } catch (Exception exception) {
+                speechListening = false;
+                call.reject("Spracherkennung konnte nicht gestartet werden", exception);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void stopSpeechRecognition(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            stopSpeechInternal();
+            call.resolve();
+        });
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        speechHandler.post(this::stopSpeechInternal);
+        super.handleOnDestroy();
+    }
+
+    private void ensureSpeechRecognizer() {
+        if (speechRecognizer != null) {
+            return;
+        }
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
+        speechRecognizer.setRecognitionListener(createSpeechListener());
+    }
+
+    private void startSpeechListening() {
+        if (!speechListening) {
+            return;
+        }
+        ensureSpeechRecognizer();
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, speechLanguage);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, speechLanguage);
+        intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true);
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
+        intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getContext().getPackageName());
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2200);
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500);
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1200);
+        try {
+            intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false);
+        } catch (Exception ignored) {
+            // Optional extra.
+        }
+        speechRecognizer.startListening(intent);
+    }
+
+    private void scheduleSpeechRestart() {
+        speechHandler.removeCallbacksAndMessages(null);
+        speechHandler.postDelayed(() -> {
+            if (speechListening) {
+                startSpeechListening();
+            }
+        }, SPEECH_RESTART_DELAY_MS);
+    }
+
+    private void stopSpeechInternal() {
+        speechListening = false;
+        speechHandler.removeCallbacksAndMessages(null);
+        if (speechRecognizer == null) {
+            return;
+        }
+        try {
+            speechRecognizer.stopListening();
+        } catch (Exception ignored) {
+            // ignore
+        }
+        try {
+            speechRecognizer.cancel();
+        } catch (Exception ignored) {
+            // ignore
+        }
+        try {
+            speechRecognizer.destroy();
+        } catch (Exception ignored) {
+            // ignore
+        }
+        speechRecognizer = null;
+    }
+
+    private void emitTranscript(Bundle results, boolean isFinal) {
+        if (results == null) {
+            return;
+        }
+        ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        if (matches == null || matches.isEmpty()) {
+            return;
+        }
+        String transcript = bestTranscript(matches);
+        if (transcript.isEmpty()) {
+            return;
+        }
+        JSObject payload = new JSObject();
+        payload.put("transcript", transcript);
+        payload.put("isFinal", isFinal);
+        notifyListeners("speechTranscript", payload);
+    }
+
+    private static String bestTranscript(ArrayList<String> matches) {
+        String best = matches.get(0) == null ? "" : matches.get(0).trim();
+        for (int i = 1; i < Math.min(matches.size(), 3); i += 1) {
+            String candidate = matches.get(i) == null ? "" : matches.get(i).trim();
+            if (candidate.length() > best.length() + 4) {
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    private RecognitionListener createSpeechListener() {
+        return new RecognitionListener() {
+            @Override
+            public void onReadyForSpeech(Bundle params) {}
+
+            @Override
+            public void onBeginningOfSpeech() {}
+
+            @Override
+            public void onRmsChanged(float rmsdB) {}
+
+            @Override
+            public void onBufferReceived(byte[] buffer) {}
+
+            @Override
+            public void onEndOfSpeech() {}
+
+            @Override
+            public void onError(int error) {
+                if (!speechListening) {
+                    return;
+                }
+                if (error == SpeechRecognizer.ERROR_NO_MATCH
+                        || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                        || error == SpeechRecognizer.ERROR_CLIENT
+                        || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                    scheduleSpeechRestart();
+                    return;
+                }
+                JSObject payload = new JSObject();
+                payload.put("message", speechErrorMessage(error));
+                notifyListeners("speechError", payload);
+                if (error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                    scheduleSpeechRestart();
+                }
+            }
+
+            @Override
+            public void onResults(Bundle results) {
+                emitTranscript(results, true);
+                if (speechListening) {
+                    scheduleSpeechRestart();
+                }
+            }
+
+            @Override
+            public void onPartialResults(Bundle partialResults) {
+                emitTranscript(partialResults, false);
+            }
+
+            @Override
+            public void onEvent(int eventType, Bundle params) {}
+        };
+    }
+
+    private static String speechErrorMessage(int error) {
+        switch (error) {
+            case SpeechRecognizer.ERROR_AUDIO:
+                return "Mikrofonfehler bei der Spracherkennung.";
+            case SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS:
+                return "Mikrofon-Zugriff verweigert – bitte in den App-Einstellungen erlauben.";
+            case SpeechRecognizer.ERROR_NETWORK:
+            case SpeechRecognizer.ERROR_NETWORK_TIMEOUT:
+                return "Spracherkennung braucht eine Internetverbindung.";
+            case SpeechRecognizer.ERROR_SERVER:
+            case SpeechRecognizer.ERROR_SERVER_DISCONNECTED:
+                return "Sprachdienst nicht erreichbar.";
+            default:
+                return "Spracherkennung fehlgeschlagen.";
+        }
     }
 }

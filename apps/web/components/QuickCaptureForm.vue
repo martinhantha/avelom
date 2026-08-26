@@ -8,6 +8,7 @@ import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
 import { resolveAppointmentPhone } from "../utils/appointment-contact";
 import { spokenFromRecognition } from "../utils/speech-transcript";
+import { isNativeAndroidSpeech, startNativeSpeech } from "../utils/native-speech";
 
 type WebSpeechRecognitionEventResult = {
   isFinal: boolean;
@@ -131,6 +132,7 @@ let speechTextBase = "";
 let parseAfterListen = false;
 let speechStopping = false;
 let speechRestartTimer: ReturnType<typeof setTimeout> | null = null;
+let stopNativeSpeech: (() => Promise<void>) | null = null;
 
 function clearSpeechRestart() {
   if (speechRestartTimer == null) return;
@@ -179,6 +181,16 @@ function stopListeningWithParse() {
   speechInterim.value = "";
   parseAfterListen = true;
   clearSpeechRestart();
+  if (stopNativeSpeech) {
+    const stop = stopNativeSpeech;
+    stopNativeSpeech = null;
+    void stop().then(() => {
+      parseAfterListen = false;
+      speechStopping = false;
+      void parseFromText();
+    });
+    return;
+  }
   if (!recognition) {
     parseAfterListen = false;
     speechStopping = false;
@@ -204,9 +216,11 @@ function getSpeechCtor(): WebSpeechCtor | null {
 }
 
 function setupSpeech() {
+  if (isNativeAndroidSpeech()) {
+    speechSupported.value = true;
+  }
   const Ctor = getSpeechCtor();
   if (!Ctor) {
-    speechSupported.value = false;
     return;
   }
   speechSupported.value = true;
@@ -214,7 +228,7 @@ function setupSpeech() {
   recognition.lang = "de-DE";
   recognition.continuous = true;
   recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
+  recognition.maxAlternatives = 3;
   recognition.onresult = (event) => {
     if (speechStopping) return;
     const { finalText, interimText } = collectSpoken(event);
@@ -258,12 +272,17 @@ function setupSpeech() {
 }
 
 async function toggleSpeech() {
-  if (!recognition) return;
   speechError.value = "";
   if (speechListening.value) {
     speechListening.value = false;
     clearSpeechRestart();
-    recognition.stop();
+    if (stopNativeSpeech) {
+      const stop = stopNativeSpeech;
+      stopNativeSpeech = null;
+      await stop();
+      return;
+    }
+    recognition?.stop();
     return;
   }
   const micOk = await device.value.requestMicrophonePermission();
@@ -278,6 +297,41 @@ async function toggleSpeech() {
   speechInterim.value = "";
   speechStopping = false;
   clearSpeechRestart();
+  if (isNativeAndroidSpeech()) {
+    try {
+      stopNativeSpeech = await startNativeSpeech({
+        onTranscript: (transcript, isFinal) => {
+          if (speechStopping) return;
+          if (isFinal) {
+            applySpoken(transcript, "");
+            if (speechListening.value) speechTextBase = text.value.trim();
+            return;
+          }
+          applySpoken("", transcript);
+        },
+        onError: (message) => {
+          speechError.value = message;
+        },
+      });
+      speechListening.value = true;
+    } catch (e) {
+      stopNativeSpeech = null;
+      if (recognition) {
+        try {
+          recognition.start();
+          speechListening.value = true;
+          return;
+        } catch {
+          // Fall through to the error below.
+        }
+      }
+      const err = e as { message?: string };
+      speechError.value = err.message || "Sprachaufnahme konnte nicht gestartet werden.";
+      speechListening.value = false;
+    }
+    return;
+  }
+  if (!recognition) return;
   try {
     recognition.start();
     speechListening.value = true;
@@ -291,28 +345,30 @@ async function toggleSpeech() {
 function toggleVoiceAssistant() {
   speechError.value = "";
   parseHint.value = "";
-  if (!recognition) {
+  if (!speechSupported.value && !recognition) {
     void parseFromText();
     return;
   }
   if (speechListening.value) {
-    parseAfterListen = true;
-    speechListening.value = false;
-    clearSpeechRestart();
-    recognition.stop();
+    stopListeningWithParse();
     return;
   }
   Object.keys(parseAnswers).forEach((key) => delete parseAnswers[key]);
-  parseAfterListen = true;
   void toggleSpeech();
 }
 
-function applyParsed(parsed: ParsedAppointmentIntent) {
+function applyParsed(
+  parsed: ParsedAppointmentIntent,
+  suggested?: Record<string, unknown>,
+) {
   if (parsed.contactText) text.value = parsed.contactText;
-  if (parsed.date) form.date = parsed.date;
-  if (parsed.time) form.time = parsed.time;
+  const slotSuggested = suggested?.slotSource === "priority";
+  if (parsed.date && (!isEditing.value || !slotSuggested)) form.date = parsed.date;
+  if (parsed.time && (!isEditing.value || !slotSuggested)) form.time = parsed.time;
   if (parsed.durationMinutes) form.durationMinutes = parsed.durationMinutes;
-  if (parsed.teacherId) form.teacherId = parsed.teacherId;
+  if (parsed.teacherId && (!isEditing.value || !slotSuggested || !form.teacherId)) {
+    form.teacherId = parsed.teacherId;
+  }
   if (parsed.resourceId) form.resourceId = parsed.resourceId;
   if (parsed.lessonTypeId) form.lessonTypeId = parsed.lessonTypeId;
   if (parsed.phone) form.phone = parsed.phone;
@@ -350,16 +406,31 @@ async function parseFromText() {
         body: { text: text.value, answers: { ...parseAnswers } },
       },
     );
-    applyParsed(result.parsed);
+    applyParsed(result.parsed, result.suggestedDefaults);
     questions.value = result.clarifyingQuestions ?? [];
     const passenger = result.parsed.customerName;
+    const slot = result.suggestedDefaults;
+    const slotHint = (() => {
+      if (isEditing.value || slot?.slotSource !== "priority" || typeof slot.date !== "string" || typeof slot.time !== "string") {
+        return "";
+      }
+      const when = new Intl.DateTimeFormat("de-DE", {
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(`${slot.date}T${slot.time}`));
+      const who = typeof slot.teacherName === "string" && slot.teacherName ? ` · ${slot.teacherName}` : "";
+      return ` Nächster freier Termin (Priorität ${Number(slot.priority) || 0}): ${when}${who}.`;
+    })();
     parseHint.value = questions.value.length
       ? "Bitte noch kurz klären – danach sind die Felder vollständig."
       : passenger
         ? result.parsed.customerId
-          ? `Felder übernommen. Passagier gefunden: ${passenger}. Bitte prüfen und speichern.`
-          : `Felder übernommen. Passagier „${passenger}“ wird beim Speichern als neuer Kunde angelegt.`
-        : "Felder übernommen, aber kein Passagier erkannt. Name bitte unten eintragen.";
+          ? `Felder übernommen. Passagier gefunden: ${passenger}. Bitte prüfen und speichern.${slotHint}`
+          : `Felder übernommen. Passagier „${passenger}“ wird beim Speichern als neuer Kunde angelegt.${slotHint}`
+        : `Felder übernommen, aber kein Passagier erkannt. Name bitte unten eintragen.${slotHint}`;
   } catch (e: unknown) {
     error.value = apiErrorMessage(e);
   } finally {
@@ -376,6 +447,11 @@ onBeforeUnmount(() => {
   speechListening.value = false;
   speechStopping = true;
   clearSpeechRestart();
+  if (stopNativeSpeech) {
+    const stop = stopNativeSpeech;
+    stopNativeSpeech = null;
+    void stop();
+  }
   if (recognition) {
     try {
       recognition.abort();
@@ -778,8 +854,9 @@ onMounted(() => {
         </UButton>
       </div>
       <p class="text-xs text-neutral-600 dark:text-neutral-400">
-        Beispiel: „morgen Flug 14 Uhr Martin, Passagier Alexandra, Telefon +49 333 6788. Fertig.“
+        Beispiel: „morgen Flug Martin, Passagier Alexandra, Telefon +49 333 6788. Fertig.“
         Am Ende „Fertig“, „Speichern“ oder „OK“ sagen, dann stoppt die Aufnahme.
+        Ohne Uhrzeit wird der nächste freie Termin mit der höchsten Priorität vorgeschlagen.
       </p>
     </div>
 

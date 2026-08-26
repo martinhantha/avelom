@@ -49,4 +49,12 @@ export class AvelomDeviceWeb extends WebPlugin implements AvelomDevicePlugin {
   async showLocalNotification(): Promise<void> {
     // Browser notifications are handled by the Notification API.
   }
+
+  async startSpeechRecognition(): Promise<void> {
+    throw this.unimplemented("startSpeechRecognition is native-only.");
+  }
+
+  async stopSpeechRecognition(): Promise<void> {
+    // Browser speech uses the Web Speech API.
+  }
 }
