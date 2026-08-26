@@ -16,18 +16,21 @@ const props = withDefaults(
     compact?: boolean;
     showComplete?: boolean;
     showDelete?: boolean;
+    showEdit?: boolean;
   }>(),
   {
     loading: false,
     compact: false,
     showComplete: true,
     showDelete: true,
+    showEdit: true,
   },
 );
 
 const emit = defineEmits<{
   complete: [];
   delete: [];
+  edit: [];
 }>();
 
 const { device } = useDeviceCapabilities();
@@ -45,12 +48,14 @@ const canComplete = computed(
     props.appointment.status !== "cancelled",
 );
 const canDelete = computed(() => props.showDelete);
+const canEdit = computed(() => props.showEdit);
 const hasActions = computed(
   () =>
     Boolean(
       telHref.value ||
         whatsappHref.value ||
         canSaveContact.value ||
+        canEdit.value ||
         canComplete.value ||
         canDelete.value,
     ),
@@ -117,6 +122,18 @@ async function saveDeviceContact() {
       <span v-if="!compact">
         {{ contactSaveState === "saved" ? "Gespeichert" : contactSaveState === "error" ? "Fehler" : "Kontakt" }}
       </span>
+    </UButton>
+    <UButton
+      v-if="canEdit"
+      :size="compact ? 'xs' : 'sm'"
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-pencil"
+      :square="compact"
+      :aria-label="compact ? 'Termin bearbeiten' : undefined"
+      @click="emit('edit')"
+    >
+      <span v-if="!compact">Bearbeiten</span>
     </UButton>
     <UButton
       v-if="canComplete"

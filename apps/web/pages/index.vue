@@ -13,6 +13,7 @@ interface AppointmentListItem {
   appointmentContactText: string | null;
   appointmentPhoneRaw: string | null;
   appointmentPhoneE164: string | null;
+  unstructuredNote: string | null;
   teacher: { id: string; displayName: string } | null;
   resource: { id: string; name: string } | null;
   lessonType: { id: string; name: string } | null;
@@ -38,6 +39,7 @@ const selectedDateKey = ref("");
 const quickOpen = ref(false);
 const quickInitialContact = ref("");
 const quickStartVoice = ref(false);
+const editingAppointment = ref<AppointmentListItem | null>(null);
 
 const tenantForm = reactive({ name: "", slug: "" });
 const userForm = reactive({
@@ -279,6 +281,13 @@ onMounted(() => {
   loadAppointments();
 });
 
+watch(quickOpen, (open) => {
+  if (!open) {
+    editingAppointment.value = null;
+    quickStartVoice.value = false;
+  }
+});
+
 watch(
   () => primaryTenant.value?.tenantId,
   () => {
@@ -287,13 +296,27 @@ watch(
 );
 
 function openAssistant() {
+  editingAppointment.value = null;
   quickInitialContact.value = "";
   quickStartVoice.value = true;
   quickOpen.value = true;
 }
 
-async function onAppointmentSaved() {
+function openEditAppointment(appointment: AppointmentListItem) {
+  editingAppointment.value = appointment;
+  quickInitialContact.value = "";
+  quickStartVoice.value = false;
+  quickOpen.value = true;
+}
+
+function closeQuickCapture() {
   quickOpen.value = false;
+  editingAppointment.value = null;
+  quickStartVoice.value = false;
+}
+
+async function onAppointmentSaved() {
+  closeQuickCapture();
   await loadAppointments();
 }
 
@@ -452,6 +475,7 @@ async function deleteAppointment(appointment: AppointmentListItem) {
                 class="ml-auto shrink-0"
                 :appointment="appointment"
                 :loading="savingId === appointment.id"
+                @edit="openEditAppointment(appointment)"
                 @complete="markCompleted(appointment)"
                 @delete="deleteAppointment(appointment)"
               />
@@ -668,21 +692,27 @@ async function deleteAppointment(appointment: AppointmentListItem) {
       <template #header>
         <div class="flex items-center justify-between gap-3 w-full">
           <div class="min-w-0">
-            <h2 class="font-medium">Neuer Termin · Schnellerfassung</h2>
+            <h2 class="font-medium">
+              {{ editingAppointment ? "Termin bearbeiten" : "Neuer Termin · Schnellerfassung" }}
+            </h2>
             <p class="text-xs text-neutral-500">
-              Per Sprache oder Text erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
+              <template v-if="editingAppointment">Datum, Kontakt und Zuordnung anpassen und speichern.</template>
+              <template v-else>
+                Per Sprache oder Text erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
+              </template>
             </p>
           </div>
-          <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="quickOpen = false" />
+          <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="closeQuickCapture" />
         </div>
       </template>
       <template #body>
         <QuickCaptureForm
-          :key="`${quickStartVoice ? 'voice' : 'type'}-${quickInitialContact || 'empty'}`"
+          :key="editingAppointment?.id ?? `${quickStartVoice ? 'voice' : 'type'}-${quickInitialContact || 'empty'}`"
+          :appointment="editingAppointment"
           :initial-contact-text="quickInitialContact"
           :start-with-voice="quickStartVoice"
           @saved="onAppointmentSaved"
-          @cancel="quickOpen = false"
+          @cancel="closeQuickCapture"
         />
       </template>
     </UModal>

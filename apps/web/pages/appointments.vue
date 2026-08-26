@@ -11,6 +11,7 @@ interface AppointmentListItem {
   appointmentContactText: string | null;
   appointmentPhoneRaw: string | null;
   appointmentPhoneE164: string | null;
+  unstructuredNote: string | null;
   teacher: { id: string; displayName: string } | null;
   resource: { id: string; name: string } | null;
   lessonType: { id: string; name: string } | null;
@@ -44,6 +45,7 @@ const filterOpen = ref(false);
 const quickOpen = ref(false);
 const quickStartVoice = ref(false);
 const quickInitialContact = ref("");
+const editingAppointment = ref<AppointmentListItem | null>(null);
 const view = ref<"list" | "calendar">("list");
 const calendarMode = ref<"week" | "month">("week");
 const weekStart = ref<Date>(getMondayOf(new Date()));
@@ -297,19 +299,34 @@ async function loadOptions() {
 }
 
 function openQuickCapture() {
+  editingAppointment.value = null;
   quickInitialContact.value = "";
   quickStartVoice.value = false;
   quickOpen.value = true;
 }
 
 function openAssistant() {
+  editingAppointment.value = null;
   quickInitialContact.value = "";
   quickStartVoice.value = true;
   quickOpen.value = true;
 }
 
-async function onAppointmentSaved() {
+function openEditAppointment(appointment: AppointmentListItem) {
+  editingAppointment.value = appointment;
+  quickInitialContact.value = "";
+  quickStartVoice.value = false;
+  quickOpen.value = true;
+}
+
+function closeQuickCapture() {
   quickOpen.value = false;
+  editingAppointment.value = null;
+  quickStartVoice.value = false;
+}
+
+async function onAppointmentSaved() {
+  closeQuickCapture();
   await loadAppointments();
 }
 
@@ -379,6 +396,13 @@ function goToPage(target: number) {
 watch(pageSize, () => {
   page.value = 1;
   loadAppointments();
+});
+
+watch(quickOpen, (open) => {
+  if (!open) {
+    editingAppointment.value = null;
+    quickStartVoice.value = false;
+  }
 });
 
 onMounted(async () => {
@@ -566,6 +590,7 @@ watch(
               class="ml-auto shrink-0"
               :appointment="appointment"
               :loading="savingId === appointment.id"
+              @edit="openEditAppointment(appointment)"
               @complete="markCompleted(appointment)"
               @delete="deleteAppointment(appointment)"
             />
@@ -690,6 +715,7 @@ watch(
                   compact
                   :appointment="appointment"
                   :loading="savingId === appointment.id"
+                  @edit="openEditAppointment(appointment)"
                   @complete="markCompleted(appointment)"
                   @delete="deleteAppointment(appointment)"
                 />
@@ -733,10 +759,11 @@ watch(
               </span>
             </div>
             <div class="flex flex-col gap-1">
-              <div
+              <button
                 v-for="appointment in appointmentsByDay(day.key).slice(0, 3)"
                 :key="appointment.id"
-                class="rounded px-1.5 py-0.5 text-[11px] leading-tight border truncate"
+                type="button"
+                class="rounded px-1.5 py-0.5 text-[11px] leading-tight border truncate text-left"
                 :class="{
                   'bg-primary-50 dark:bg-primary-900/30 border-primary-200 dark:border-primary-800 text-primary-900 dark:text-primary-100':
                     appointment.status === 'confirmed',
@@ -748,10 +775,11 @@ watch(
                     appointment.status === 'cancelled',
                 }"
                 :title="`${formatTime(appointment.startsAt)} ${appointmentTitle(appointment)}`"
+                @click="openEditAppointment(appointment)"
               >
                 <span class="font-medium tabular-nums">{{ formatTime(appointment.startsAt) }}</span>
                 <span class="ml-1">{{ appointmentTitle(appointment) }}</span>
-              </div>
+              </button>
               <button
                 v-if="appointmentsByDay(day.key).length > 3"
                 type="button"
@@ -775,21 +803,27 @@ watch(
       <template #header>
         <div class="flex items-center justify-between gap-3 w-full">
           <div class="min-w-0">
-            <h2 class="font-medium">Neuer Termin · Schnellerfassung</h2>
+            <h2 class="font-medium">
+              {{ editingAppointment ? "Termin bearbeiten" : "Neuer Termin · Schnellerfassung" }}
+            </h2>
             <p class="text-xs text-neutral-500">
-              Kontakt erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
+              <template v-if="editingAppointment">Datum, Kontakt und Zuordnung anpassen und speichern.</template>
+              <template v-else>
+                Kontakt erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
+              </template>
             </p>
           </div>
-          <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="quickOpen = false" />
+          <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="closeQuickCapture" />
         </div>
       </template>
       <template #body>
         <QuickCaptureForm
-          :key="`${quickStartVoice ? 'voice' : 'type'}-${quickInitialContact || 'empty'}`"
+          :key="editingAppointment?.id ?? `${quickStartVoice ? 'voice' : 'type'}-${quickInitialContact || 'empty'}`"
+          :appointment="editingAppointment"
           :initial-contact-text="quickInitialContact"
           :start-with-voice="quickStartVoice"
           @saved="onAppointmentSaved"
-          @cancel="quickOpen = false"
+          @cancel="closeQuickCapture"
         />
       </template>
     </UModal>

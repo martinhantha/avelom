@@ -6,6 +6,7 @@ import { isCallHintsOptIn } from "@avelom/device-capabilities";
 import { useAuth } from "../composables/useAuth";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
+import { resolveAppointmentPhone } from "../utils/appointment-contact";
 
 type WebSpeechRecognitionEventResult = {
   isFinal: boolean;
@@ -47,6 +48,7 @@ interface LessonTypeOption {
 interface CustomerOption {
   id: string;
   displayName: string;
+  phones?: { e164: string | null; raw: string | null; isPrimary: boolean }[];
 }
 interface SchedulingOptions {
   teachers: TeacherOption[];
@@ -61,9 +63,13 @@ interface SchedulingOptions {
 }
 interface AppointmentDto {
   id: string;
+  version?: number;
   startsAt: string;
   endsAt: string;
   appointmentContactText: string | null;
+  appointmentPhoneRaw?: string | null;
+  appointmentPhoneE164?: string | null;
+  unstructuredNote?: string | null;
   teacher: TeacherOption | null;
   resource: ResourceOption | null;
   lessonType: LessonTypeOption | null;
@@ -71,6 +77,7 @@ interface AppointmentDto {
 }
 
 const props = defineProps<{
+  appointment?: AppointmentDto | null;
   initialContactText?: string;
   initialTeacherId?: string;
   initialLessonTypeId?: string;
@@ -92,7 +99,8 @@ const resourcesEnabled = computed(
   () => options.value?.resourcesEnabled ?? primaryTenant.value?.resourcesEnabled ?? true,
 );
 
-const text = ref(props.initialContactText ?? "");
+const isEditing = computed(() => Boolean(props.appointment?.id));
+const text = ref(props.appointment?.appointmentContactText ?? props.initialContactText ?? "");
 const options = ref<SchedulingOptions | null>(null);
 const loading = ref(false);
 const saving = ref(false);
@@ -341,16 +349,23 @@ onBeforeUnmount(() => {
 });
 
 const form = reactive({
-  date: toDateInput(initialStart),
-  time: toTimeInput(initialStart),
-  durationMinutes: 60,
-  teacherId: props.initialTeacherId ?? "",
-  resourceId: "",
-  lessonTypeId: props.initialLessonTypeId ?? "",
-  customerId: "",
-  phone: "",
-  note: "",
+  date: toDateInput(props.appointment ? new Date(props.appointment.startsAt) : initialStart),
+  time: toTimeInput(props.appointment ? new Date(props.appointment.startsAt) : initialStart),
+  durationMinutes: props.appointment
+    ? durationMinutesFromRange(props.appointment.startsAt, props.appointment.endsAt)
+    : 60,
+  teacherId: props.appointment?.teacher?.id ?? props.initialTeacherId ?? "",
+  resourceId: props.appointment?.resource?.id ?? "",
+  lessonTypeId: props.appointment?.lessonType?.id ?? props.initialLessonTypeId ?? "",
+  customerId: props.appointment?.customer?.id ?? "",
+  phone: props.appointment ? resolveAppointmentPhone(props.appointment) ?? "" : "",
+  note: props.appointment?.unstructuredNote ?? "",
 });
+let hydratingForm = false;
+
+if (props.appointment?.customer?.displayName) {
+  passengerName.value = props.appointment.customer.displayName;
+}
 
 const durationOptions = [30, 45, 60, 90, 120];
 const useTypeDuration = computed(() => primaryTenant.value?.useDefaultDuration ?? true);
@@ -429,6 +444,7 @@ function onCustomerSelect() {
 }
 
 watch(passengerName, (name) => {
+  if (hydratingForm) return;
   const selected = options.value?.customers.find((item) => item.id === form.customerId);
   if (!selected) return;
   if (name.trim() !== selected.displayName) {
@@ -440,14 +456,33 @@ const selectedLessonType = computed(() =>
   options.value?.lessonTypes.find((item) => item.id === form.lessonTypeId) ?? null,
 );
 
-const effectiveDuration = computed(() => {
-  if (useTypeDuration.value) {
-    return selectedLessonType.value?.defaultDurationMin ?? 60;
-  }
-  return form.durationMinutes;
-});
+const effectiveDuration = computed(() => form.durationMinutes || selectedLessonType.value?.defaultDurationMin || 60);
 
-const canSave = computed(() => Boolean(primaryTenant.value && form.date && form.time && text.value.trim()));
+const canSave = computed(() =>
+  Boolean(primaryTenant.value && form.date && form.time && (text.value.trim() || passengerName.value.trim() || form.customerId)),
+);
+
+function durationMinutesFromRange(startsAt: string, endsAt: string) {
+  const minutes = Math.round((new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 60_000);
+  return minutes > 0 ? minutes : 60;
+}
+
+function fillFromAppointment(appointment: AppointmentDto) {
+  hydratingForm = true;
+  const startsAt = new Date(appointment.startsAt);
+  text.value = appointment.appointmentContactText ?? "";
+  form.date = toDateInput(startsAt);
+  form.time = toTimeInput(startsAt);
+  form.durationMinutes = durationMinutesFromRange(appointment.startsAt, appointment.endsAt);
+  form.teacherId = appointment.teacher?.id ?? "";
+  form.resourceId = appointment.resource?.id ?? "";
+  form.lessonTypeId = appointment.lessonType?.id ?? "";
+  form.customerId = appointment.customer?.id ?? "";
+  form.phone = resolveAppointmentPhone(appointment) ?? "";
+  form.note = appointment.unstructuredNote ?? "";
+  passengerName.value = appointment.customer?.displayName ?? "";
+  hydratingForm = false;
+}
 
 function nextFullHour() {
   const date = new Date();
@@ -506,24 +541,32 @@ async function loadOptions() {
       `/api/v1/tenants/${primaryTenant.value.tenantId}/scheduling/options`,
       { credentials: "include" },
     );
-    if (!form.teacherId) {
-      const preferred = options.value.defaultTeacherId;
-      form.teacherId =
-        preferred && options.value.teachers.some((teacher) => teacher.id === preferred)
-          ? preferred
-          : (options.value.teachers[0]?.id ?? "");
-    }
-    if (resourcesEnabled.value) {
-      form.resourceId ||= options.value.resources[0]?.id ?? "";
+    if (props.appointment) {
+      fillFromAppointment(props.appointment);
     } else {
-      form.resourceId = "";
-    }
-    if (!form.lessonTypeId) {
-      const preferred = options.value.defaultLessonTypeId;
-      form.lessonTypeId =
-        preferred && options.value.lessonTypes.some((lessonType) => lessonType.id === preferred)
-          ? preferred
-          : (options.value.lessonTypes[0]?.id ?? "");
+      if (!form.teacherId) {
+        const preferred = options.value.defaultTeacherId;
+        form.teacherId =
+          preferred && options.value.teachers.some((teacher) => teacher.id === preferred)
+            ? preferred
+            : (options.value.teachers[0]?.id ?? "");
+      }
+      if (resourcesEnabled.value) {
+        form.resourceId ||= options.value.resources[0]?.id ?? "";
+      } else {
+        form.resourceId = "";
+      }
+      if (!form.lessonTypeId) {
+        const preferred = options.value.defaultLessonTypeId;
+        form.lessonTypeId =
+          preferred && options.value.lessonTypes.some((lessonType) => lessonType.id === preferred)
+            ? preferred
+            : (options.value.lessonTypes[0]?.id ?? "");
+      }
+      const selectedType = options.value.lessonTypes.find((item) => item.id === form.lessonTypeId);
+      if (selectedType?.defaultDurationMin) {
+        form.durationMinutes = selectedType.defaultDurationMin;
+      }
     }
   } catch (e: unknown) {
     error.value = apiErrorMessage(e);
@@ -535,11 +578,10 @@ async function loadOptions() {
 watch(
   () => form.lessonTypeId,
   (lessonTypeId) => {
-    if (!useTypeDuration.value) {
-      const lessonType = options.value?.lessonTypes.find((item) => item.id === lessonTypeId);
-      if (lessonType?.defaultDurationMin) {
-        form.durationMinutes = lessonType.defaultDurationMin;
-      }
+    if (hydratingForm) return;
+    const lessonType = options.value?.lessonTypes.find((item) => item.id === lessonTypeId);
+    if (lessonType?.defaultDurationMin) {
+      form.durationMinutes = lessonType.defaultDurationMin;
     }
   },
 );
@@ -589,25 +631,45 @@ async function saveAppointment() {
       passengerName.value = created.displayName;
     }
 
-    const result = await $fetch<AppointmentDto>(
-      `/api/v1/tenants/${primaryTenant.value.tenantId}/appointments`,
-      {
-        method: "POST",
-        credentials: "include",
-        body: {
-          startsAt: startsAt.toISOString(),
-          endsAt: endsAt.toISOString(),
-          status: "confirmed",
-          lessonTypeId: form.lessonTypeId || undefined,
-          teacherId: form.teacherId || undefined,
-          resourceId: resourcesEnabled.value ? form.resourceId || undefined : undefined,
-          customerId,
-          appointmentContactText: text.value,
-          appointmentPhoneRaw: form.phone || undefined,
-          unstructuredNote: form.note || undefined,
-        },
-      },
-    );
+    const phoneValue = form.phone.trim();
+    const payload = {
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      lessonTypeId: form.lessonTypeId || null,
+      teacherId: form.teacherId || null,
+      resourceId: resourcesEnabled.value ? form.resourceId || null : undefined,
+      customerId: customerId || null,
+      appointmentContactText: text.value,
+      appointmentPhoneRaw: phoneValue || null,
+      appointmentPhoneE164: phoneValue.startsWith("+") ? phoneValue : null,
+      unstructuredNote: form.note.trim() || null,
+    };
+
+    const result = isEditing.value
+      ? await $fetch<AppointmentDto>(
+          `/api/v1/tenants/${primaryTenant.value.tenantId}/appointments/${props.appointment!.id}`,
+          {
+            method: "PATCH",
+            credentials: "include",
+            body: payload,
+            headers: props.appointment?.version ? { "If-Match": String(props.appointment.version) } : undefined,
+          },
+        )
+      : await $fetch<AppointmentDto>(`/api/v1/tenants/${primaryTenant.value.tenantId}/appointments`, {
+          method: "POST",
+          credentials: "include",
+          body: {
+            ...payload,
+            status: "confirmed",
+            lessonTypeId: payload.lessonTypeId || undefined,
+            teacherId: payload.teacherId || undefined,
+            resourceId: payload.resourceId || undefined,
+            customerId: payload.customerId || undefined,
+            appointmentPhoneRaw: payload.appointmentPhoneRaw || undefined,
+            appointmentPhoneE164: payload.appointmentPhoneE164 || undefined,
+            unstructuredNote: payload.unstructuredNote || undefined,
+          },
+        });
     saved.value = result;
     emit("saved", result);
   } catch (e: unknown) {
@@ -642,7 +704,7 @@ onMounted(() => {
       color="success"
       variant="soft"
       icon="i-lucide-circle-check"
-      title="Termin gespeichert"
+      :title="isEditing ? 'Termin aktualisiert' : 'Termin gespeichert'"
       :description="`${formatDateTime(saved.startsAt)} · ${saved.appointmentContactText || 'ohne Kontakttext'}`"
     />
 
@@ -651,7 +713,7 @@ onMounted(() => {
       color="error"
       variant="soft"
       icon="i-lucide-circle-alert"
-      title="Termin konnte nicht gespeichert werden"
+      :title="isEditing ? 'Termin konnte nicht aktualisiert werden' : 'Termin konnte nicht gespeichert werden'"
       :description="conflictType ? `${error} (${conflictType})` : error"
     />
 
@@ -928,7 +990,7 @@ onMounted(() => {
         :loading="saving"
         @click="saveAppointment"
       >
-        Übernehmen &amp; speichern
+        {{ isEditing ? "Änderungen speichern" : "Übernehmen & speichern" }}
       </UButton>
     </div>
   </div>

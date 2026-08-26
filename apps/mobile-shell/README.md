@@ -12,8 +12,9 @@ Die Avelom-UI bleibt Nuxt (`apps/web`). Diese App ist nur die native Hülle: And
 
 ```bash
 # 1. In der Repo-Root-.env setzen, z. B.:
-#    CAPACITOR_SERVER_URL=http://10.0.2.2:3000          # Android-Emulator
-#    CAPACITOR_SERVER_URL=http://192.168.x.x:3000       # physisches Gerät (LAN-IP)
+#    CAPACITOR_SERVER_URL=https://avelom.myflights.cloud  # Live (App-Test)
+#    CAPACITOR_SERVER_URL=http://10.0.2.2:3000            # Android-Emulator
+#    CAPACITOR_SERVER_URL=http://192.168.x.x:3000         # physisches Gerät (LAN-IP)
 
 # 2. Web-App lokal starten (fürs Gerät: --host 0.0.0.0)
 pnpm dev:web
@@ -28,8 +29,9 @@ pnpm cap:open:android
 
 `capacitor.config.ts` liest `CAPACITOR_SERVER_URL` aus der Root-`.env`. Ohne diese Variable (und ohne Prefix auf `cap:sync`) zeigt die App die Platzhalterseite „nicht gesetzt“.
 
-- **Android-Emulator:** `http://10.0.2.2:3000` — `10.0.2.2` ist der Host-Rechner, nicht `localhost` und oft auch nicht `192.168.x.x`.
-- **Physisches Gerät:** `http://192.168.x.x:3000` (LAN-IP des Rechners, nicht `localhost`). Nuxt muss mit `--host 0.0.0.0` lauschen.
+- **Live / App-Test:** `https://avelom.myflights.cloud` — UI und `/api` kommen von Production; kein lokaler Nuxt nötig.
+- **Android-Emulator (lokal):** `http://10.0.2.2:3000` — `10.0.2.2` ist der Host-Rechner, nicht `localhost` und oft auch nicht `192.168.x.x`.
+- **Physisches Gerät (lokal):** `http://192.168.x.x:3000` (LAN-IP des Rechners, nicht `localhost`). Nuxt muss mit `--host 0.0.0.0` lauschen.
 
 Nach dem ersten `cap add android` in `android/app/src/main/AndroidManifest.xml` nichts extra für Call-Log tun — das Plugin bringt `READ_CALL_LOG` mit.
 
@@ -43,7 +45,7 @@ Nach `cap add ios` in `ios/App/App/Info.plist`:
 ## Produktion
 
 ```bash
-# Production-URL in .env setzen, dann:
+# .env: CAPACITOR_SERVER_URL=https://avelom.myflights.cloud
 pnpm cap:sync
 ```
 
