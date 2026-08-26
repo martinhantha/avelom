@@ -282,15 +282,17 @@ watch(
         variant="outline"
         color="neutral"
         icon="i-lucide-filter"
+        aria-label="Filter"
+        title="Filter"
         @click="filterOpen = !filterOpen"
       >
-        Filter
-        <UBadge v-if="activeFilterCount" color="primary" variant="subtle" class="ml-1">
+        <span class="hidden sm:inline">Filter</span>
+        <UBadge v-if="activeFilterCount" color="primary" variant="subtle" class="sm:ml-1">
           {{ activeFilterCount }}
         </UBadge>
         <UIcon
           :name="filterOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-          class="ml-1 size-4"
+          class="ml-1 size-4 hidden sm:inline-flex"
         />
       </UButton>
     </div>

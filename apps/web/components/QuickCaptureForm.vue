@@ -6,9 +6,8 @@ import { isCallHintsOptIn } from "@avelom/device-capabilities";
 import { useAuth } from "../composables/useAuth";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
-import { Capacitor } from "@capacitor/core";
 import { resolveAppointmentPhone } from "../utils/appointment-contact";
-import { longestTranscript, mergeSpeechSegments, stitchTranscript } from "../utils/speech-transcript";
+import { spokenFromRecognition } from "../utils/speech-transcript";
 
 type WebSpeechRecognitionEventResult = {
   isFinal: boolean;
@@ -129,11 +128,9 @@ const STOP_COMMAND_RE =
 
 let recognition: WebSpeechRecognition | null = null;
 let speechTextBase = "";
-let speechHypothesis = "";
 let parseAfterListen = false;
 let speechStopping = false;
 let speechRestartTimer: ReturnType<typeof setTimeout> | null = null;
-const androidSpeech = Capacitor.getPlatform() === "android";
 
 function clearSpeechRestart() {
   if (speechRestartTimer == null) return;
@@ -143,36 +140,28 @@ function clearSpeechRestart() {
 
 function collectSpoken(event: WebSpeechRecognitionEvent): { finalText: string; interimText: string } {
   const finals: string[] = [];
-  const interims: string[] = [];
+  let interimText = "";
   for (let i = 0; i < event.results.length; i += 1) {
     const result = event.results[i];
     const transcript = (result[0]?.transcript ?? "").replace(/\s+/g, " ").trim();
     if (!transcript) continue;
     if (result.isFinal) finals.push(transcript);
-    else interims.push(transcript);
-  }
-  if (androidSpeech) {
-    const hypothesis = longestTranscript([...finals, ...interims]);
-    const last = event.results[event.results.length - 1];
-    return last?.isFinal ? { finalText: hypothesis, interimText: "" } : { finalText: "", interimText: hypothesis };
+    else interimText = transcript;
   }
   return {
-    finalText: mergeSpeechSegments(finals),
-    interimText: interims.at(-1) ?? "",
+    finalText: spokenFromRecognition(finals, ""),
+    interimText,
   };
 }
 
 function applySpoken(finalText: string, interimText: string) {
-  const incoming = (interimText || finalText).trim();
-  if (!incoming) return;
-  speechHypothesis = stitchTranscript(speechHypothesis, incoming);
-  const combined = stitchTranscript(speechTextBase, speechHypothesis);
+  const spoken = spokenFromRecognition(finalText ? [finalText] : [], interimText);
+  const combined = spokenFromRecognition(speechTextBase ? [speechTextBase] : [], spoken);
   const { cleaned, stop } = stripStopCommand(combined);
   text.value = cleaned;
   speechInterim.value = interimText;
   if (!stop) return;
   speechTextBase = cleaned;
-  speechHypothesis = "";
   speechInterim.value = "";
   stopListeningWithParse();
 }
@@ -247,12 +236,11 @@ function setupSpeech() {
     if (speechStopping || shouldParse) {
       speechStopping = false;
       speechListening.value = false;
-      speechTextBase = text.value.trim();
-      speechHypothesis = "";
       if (shouldParse) void parseFromText();
       return;
     }
     if (speechListening.value && recognition) {
+      speechTextBase = text.value.trim();
       speechRestartTimer = setTimeout(() => {
         speechRestartTimer = null;
         if (!speechListening.value || speechStopping || !recognition) return;
@@ -287,7 +275,6 @@ async function toggleSpeech() {
     return;
   }
   speechTextBase = text.value.trim();
-  speechHypothesis = "";
   speechInterim.value = "";
   speechStopping = false;
   clearSpeechRestart();

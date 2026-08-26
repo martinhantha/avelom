@@ -430,59 +430,75 @@ watch(
           <span class="ml-2 text-sm font-normal text-neutral-500">({{ pagination.total }})</span>
         </h1>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
         <div class="inline-flex rounded-md border border-neutral-300 dark:border-neutral-700 overflow-hidden">
           <button
             type="button"
-            class="px-3 py-1.5 text-sm flex items-center gap-1 transition"
+            class="px-2 sm:px-3 py-1.5 text-sm flex items-center gap-1 transition"
             :class="
               view === 'list'
                 ? 'bg-primary-100 text-primary-900 dark:bg-primary-900/40 dark:text-primary-100'
                 : 'bg-white dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
             "
+            aria-label="Listenansicht"
+            title="Liste"
             @click="setView('list')"
           >
             <UIcon name="i-lucide-list" class="size-4" />
-            <span>Liste</span>
+            <span class="hidden sm:inline">Liste</span>
           </button>
           <button
             type="button"
-            class="px-3 py-1.5 text-sm flex items-center gap-1 border-l border-neutral-300 dark:border-neutral-700 transition"
+            class="px-2 sm:px-3 py-1.5 text-sm flex items-center gap-1 border-l border-neutral-300 dark:border-neutral-700 transition"
             :class="
               view === 'calendar'
                 ? 'bg-primary-100 text-primary-900 dark:bg-primary-900/40 dark:text-primary-100'
                 : 'bg-white dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800'
             "
+            aria-label="Kalenderansicht"
+            title="Kalender"
             @click="setView('calendar')"
           >
             <UIcon name="i-lucide-calendar-range" class="size-4" />
-            <span>Kalender</span>
+            <span class="hidden sm:inline">Kalender</span>
           </button>
         </div>
         <UButton
           variant="outline"
           color="neutral"
           icon="i-lucide-filter"
+          aria-label="Filter"
+          title="Filter"
           @click="filterOpen = !filterOpen"
         >
-          Filter
-          <UBadge v-if="activeFilterCount" color="primary" variant="subtle" class="ml-1">
+          <span class="hidden sm:inline">Filter</span>
+          <UBadge v-if="activeFilterCount" color="primary" variant="subtle" class="sm:ml-1">
             {{ activeFilterCount }}
           </UBadge>
           <UIcon
             :name="filterOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-            class="ml-1 size-4"
+            class="ml-1 size-4 hidden sm:inline-flex"
           />
         </UButton>
         <UButton
           variant="outline"
           color="neutral"
           icon="i-lucide-message-circle-question"
+          aria-label="Assistent"
+          title="Assistent"
           @click="openAssistant"
         >
-          Assistent
+          <span class="hidden sm:inline">Assistent</span>
         </UButton>
-        <UButton icon="i-lucide-plus" color="primary" @click="openQuickCapture">Neuer Termin</UButton>
+        <UButton
+          icon="i-lucide-plus"
+          color="primary"
+          aria-label="Neuer Termin"
+          title="Neuer Termin"
+          @click="openQuickCapture"
+        >
+          <span class="hidden sm:inline">Neuer Termin</span>
+        </UButton>
       </div>
     </div>
 

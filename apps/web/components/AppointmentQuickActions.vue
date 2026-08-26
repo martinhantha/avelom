@@ -89,9 +89,10 @@ async function saveDeviceContact() {
       variant="soft"
       icon="i-lucide-phone"
       :square="compact"
-      :aria-label="compact ? 'Anrufen' : undefined"
+      aria-label="Anrufen"
+      title="Anrufen"
     >
-      <span v-if="!compact">Anrufen</span>
+      <span v-if="!compact" class="hidden sm:inline">Anrufen</span>
     </UButton>
     <UButton
       v-if="whatsappHref"
@@ -103,9 +104,10 @@ async function saveDeviceContact() {
       variant="soft"
       icon="i-lucide-message-circle"
       :square="compact"
-      :aria-label="compact ? 'WhatsApp öffnen' : undefined"
+      aria-label="WhatsApp öffnen"
+      title="WhatsApp"
     >
-      <span v-if="!compact">WhatsApp</span>
+      <span v-if="!compact" class="hidden sm:inline">WhatsApp</span>
     </UButton>
     <UButton
       v-if="canSaveContact"
@@ -115,10 +117,11 @@ async function saveDeviceContact() {
       icon="i-lucide-user-plus"
       :loading="savingContact"
       :square="compact"
-      :aria-label="compact ? 'Kontakt speichern' : undefined"
+      aria-label="Kontakt speichern"
+      title="Kontakt speichern"
       @click="saveDeviceContact"
     >
-      <span v-if="!compact">
+      <span v-if="!compact" class="hidden sm:inline">
         {{ contactSaveState === "saved" ? "Gespeichert" : contactSaveState === "error" ? "Fehler" : "Kontakt" }}
       </span>
     </UButton>
@@ -129,10 +132,11 @@ async function saveDeviceContact() {
       variant="soft"
       icon="i-lucide-pencil"
       :square="compact"
-      :aria-label="compact ? 'Termin bearbeiten' : undefined"
+      aria-label="Termin bearbeiten"
+      title="Bearbeiten"
       @click="emit('edit')"
     >
-      <span v-if="!compact">Bearbeiten</span>
+      <span v-if="!compact" class="hidden sm:inline">Bearbeiten</span>
     </UButton>
     <UButton
       v-if="canComplete"
@@ -142,10 +146,11 @@ async function saveDeviceContact() {
       icon="i-lucide-check"
       :loading="loading"
       :square="compact"
-      :aria-label="compact ? 'Als erledigt markieren' : undefined"
+      aria-label="Als erledigt markieren"
+      title="Erledigt"
       @click="emit('complete')"
     >
-      <span v-if="!compact">Erledigt</span>
+      <span v-if="!compact" class="hidden sm:inline">Erledigt</span>
     </UButton>
     <UButton
       v-if="canDelete"
@@ -155,10 +160,11 @@ async function saveDeviceContact() {
       icon="i-lucide-trash-2"
       :loading="loading"
       :square="compact"
-      :aria-label="compact ? 'Termin löschen' : undefined"
+      aria-label="Termin löschen"
+      title="Löschen"
       @click="emit('delete')"
     >
-      <span v-if="!compact">Löschen</span>
+      <span v-if="!compact" class="hidden sm:inline">Löschen</span>
     </UButton>
   </div>
 </template>
