@@ -270,13 +270,39 @@ const selectedTeacherId = ref("");
 const rules = ref<AvailabilityRule[]>([]);
 const ruleForm = reactive({
   id: "",
-  weekday: 1,
+  weekdays: [1, 2, 3, 4, 5] as number[],
+  originalWeekday: null as number | null,
   startTime: "09:00",
   endTime: "17:00",
   priority: 0,
 });
 const rulesLoading = ref(false);
 const weekdayLabels = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const weekdayOrder = [1, 2, 3, 4, 5, 6, 0];
+const weekdayPresets = [
+  { label: "Mo–Fr", days: [1, 2, 3, 4, 5] },
+  { label: "Wochenende", days: [6, 0] },
+  { label: "Alle", days: [1, 2, 3, 4, 5, 6, 0] },
+];
+
+function toggleWeekday(day: number) {
+  const index = ruleForm.weekdays.indexOf(day);
+  if (index >= 0) {
+    ruleForm.weekdays.splice(index, 1);
+  } else {
+    ruleForm.weekdays.push(day);
+  }
+}
+
+function setWeekdays(days: number[]) {
+  ruleForm.weekdays = [...days];
+}
+
+function selectedWeekdays(): number[] {
+  return [...new Set(ruleForm.weekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort(
+    (a, b) => a - b,
+  );
+}
 
 async function loadTeachers() {
   if (!primaryTenant.value?.tenantId) return;
@@ -323,14 +349,16 @@ async function loadRules() {
 
 function selectRule(item: AvailabilityRule) {
   ruleForm.id = item.id;
-  ruleForm.weekday = item.weekday;
+  ruleForm.weekdays = [item.weekday];
+  ruleForm.originalWeekday = item.weekday;
   ruleForm.startTime = item.startTime;
   ruleForm.endTime = item.endTime;
   ruleForm.priority = item.priority;
 }
 function resetRuleForm() {
   ruleForm.id = "";
-  ruleForm.weekday = 1;
+  ruleForm.weekdays = [1, 2, 3, 4, 5];
+  ruleForm.originalWeekday = null;
   ruleForm.startTime = "09:00";
   ruleForm.endTime = "17:00";
   ruleForm.priority = 0;
@@ -338,21 +366,43 @@ function resetRuleForm() {
 
 async function saveRule() {
   if (!primaryTenant.value?.tenantId || !selectedTeacherId.value) return;
+  const days = selectedWeekdays();
+  if (!days.length) {
+    setError("Mindestens einen Wochentag wählen");
+    return;
+  }
   rulesLoading.value = true;
   try {
-    const body = {
-      weekday: Number(ruleForm.weekday),
+    const base = `/api/v1/tenants/${primaryTenant.value.tenantId}/teachers/${selectedTeacherId.value}/availability/rules`;
+    const times = {
       startTime: ruleForm.startTime,
       endTime: ruleForm.endTime,
       priority: Number(ruleForm.priority) || 0,
     };
-    const base = `/api/v1/tenants/${primaryTenant.value.tenantId}/teachers/${selectedTeacherId.value}/availability/rules`;
     if (ruleForm.id) {
-      await $fetch(`${base}/${ruleForm.id}`, { method: "PATCH", credentials: "include", body });
-      setInfo("Regel aktualisiert");
+      const original = ruleForm.originalWeekday;
+      const patchDay = original !== null && days.includes(original) ? original : days[0];
+      await $fetch(`${base}/${ruleForm.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        body: { weekday: patchDay, ...times },
+      });
+      const extraDays = days.filter((day) => day !== patchDay);
+      if (extraDays.length) {
+        await $fetch(base, {
+          method: "POST",
+          credentials: "include",
+          body: { weekdays: extraDays, ...times },
+        });
+      }
+      setInfo(extraDays.length ? "Regel aktualisiert und weitere Tage angelegt" : "Regel aktualisiert");
     } else {
-      await $fetch(base, { method: "POST", credentials: "include", body });
-      setInfo("Regel angelegt");
+      await $fetch(base, {
+        method: "POST",
+        credentials: "include",
+        body: { weekdays: days, ...times },
+      });
+      setInfo(days.length > 1 ? `Regel für ${days.length} Tage angelegt` : "Regel angelegt");
     }
     resetRuleForm();
     await loadRules();
@@ -859,14 +909,37 @@ onMounted(() => {
             <h2 class="font-medium">{{ ruleForm.id ? "Regel bearbeiten" : "Neue Regel" }}</h2>
           </template>
           <form class="space-y-3" @submit.prevent="saveRule">
-            <UFormField label="Wochentag">
-              <select
-                v-model.number="ruleForm.weekday"
-                class="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
-                :disabled="!canEdit"
-              >
-                <option v-for="(label, idx) in weekdayLabels" :key="idx" :value="idx">{{ label }}</option>
-              </select>
+            <UFormField label="Wochentage">
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="day in weekdayOrder"
+                  :key="day"
+                  type="button"
+                  class="min-w-10 rounded-md border px-2 py-1.5 text-sm font-medium transition"
+                  :class="
+                    ruleForm.weekdays.includes(day)
+                      ? 'border-primary-500 bg-primary-500 text-white'
+                      : 'border-neutral-300 bg-white text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200'
+                  "
+                  :disabled="!canEdit"
+                  @click="toggleWeekday(day)"
+                >
+                  {{ weekdayLabels[day] }}
+                </button>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-1">
+                <UButton
+                  v-for="preset in weekdayPresets"
+                  :key="preset.label"
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  :disabled="!canEdit"
+                  @click="setWeekdays(preset.days)"
+                >
+                  {{ preset.label }}
+                </UButton>
+              </div>
             </UFormField>
             <div class="grid grid-cols-2 gap-2">
               <UFormField label="Von">

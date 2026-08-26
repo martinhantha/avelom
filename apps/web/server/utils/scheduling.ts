@@ -1007,15 +1007,34 @@ export async function listAvailabilityRules(tenantId: string, teacherIdInput: st
   return { data: rows.map(toRuleDto) };
 }
 
-function normalizeRulePayload(rawBody: unknown, partial = false) {
-  const body = (rawBody ?? {}) as Record<string, unknown>;
-  const weekday = hasOwn(body, "weekday") ? Number(body.weekday) : undefined;
-  if (!partial && weekday === undefined) {
+function normalizeWeekdays(body: Record<string, unknown>, partial: boolean): number[] | undefined {
+  if (hasOwn(body, "weekdays")) {
+    if (!Array.isArray(body.weekdays) || body.weekdays.length === 0) {
+      throwValidation("Mindestens ein Wochentag ist erforderlich", { field: "weekdays" });
+    }
+    const days = [...new Set(body.weekdays.map((value) => Number(value)))].sort((a, b) => a - b);
+    if (days.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
+      throwValidation("Wochentag muss zwischen 0 und 6 liegen", { field: "weekdays" });
+    }
+    return days;
+  }
+  if (hasOwn(body, "weekday")) {
+    const weekday = Number(body.weekday);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      throwValidation("Wochentag muss zwischen 0 und 6 liegen", { field: "weekday" });
+    }
+    return [weekday];
+  }
+  if (!partial) {
     throwValidation("Wochentag ist erforderlich", { field: "weekday" });
   }
-  if (weekday !== undefined && (!Number.isInteger(weekday) || weekday < 0 || weekday > 6)) {
-    throwValidation("Wochentag muss zwischen 0 und 6 liegen", { field: "weekday" });
-  }
+  return undefined;
+}
+
+function normalizeRulePayload(rawBody: unknown, partial = false) {
+  const body = (rawBody ?? {}) as Record<string, unknown>;
+  const weekdays = normalizeWeekdays(body, partial);
+  const weekday = weekdays?.[0];
 
   const startTime = hasOwn(body, "startTime") ? normalizeTime(body.startTime, "startTime") : undefined;
   const endTime = hasOwn(body, "endTime") ? normalizeTime(body.endTime, "endTime") : undefined;
@@ -1040,7 +1059,7 @@ function normalizeRulePayload(rawBody: unknown, partial = false) {
     throwValidation("Priorität muss eine ganze Zahl sein", { field: "priority" });
   }
 
-  return { weekday, startTime, endTime, locationId, activityTags, priority };
+  return { weekday, weekdays, startTime, endTime, locationId, activityTags, priority };
 }
 
 export async function createAvailabilityRule(
@@ -1051,33 +1070,39 @@ export async function createAvailabilityRule(
   const teacherId = normalizeRequiredUuid(teacherIdInput, "teacherId");
   await requireTeacher(tenantId, teacherId);
   const payload = normalizeRulePayload(rawBody);
+  const weekdays = payload.weekdays ?? (payload.weekday !== undefined ? [payload.weekday] : []);
+  const ruleSelect = {
+    id: true,
+    tenantId: true,
+    teacherId: true,
+    weekday: true,
+    startTime: true,
+    endTime: true,
+    locationId: true,
+    activityTags: true,
+    priority: true,
+    createdAt: true,
+    updatedAt: true,
+  } as const;
 
-  const row = await prisma.availabilityRule.create({
-    data: {
-      tenantId,
-      teacherId,
-      weekday: payload.weekday!,
-      startTime: payload.startTime!,
-      endTime: payload.endTime!,
-      locationId: payload.locationId,
-      activityTags: payload.activityTags,
-      priority: payload.priority ?? 0,
-    },
-    select: {
-      id: true,
-      tenantId: true,
-      teacherId: true,
-      weekday: true,
-      startTime: true,
-      endTime: true,
-      locationId: true,
-      activityTags: true,
-      priority: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-  return toRuleDto(row);
+  const rows = await prisma.$transaction(
+    weekdays.map((weekday) =>
+      prisma.availabilityRule.create({
+        data: {
+          tenantId,
+          teacherId,
+          weekday,
+          startTime: payload.startTime!,
+          endTime: payload.endTime!,
+          locationId: payload.locationId,
+          activityTags: payload.activityTags,
+          priority: payload.priority ?? 0,
+        },
+        select: ruleSelect,
+      }),
+    ),
+  );
+  return { data: rows.map(toRuleDto) };
 }
 
 export async function patchAvailabilityRule(
