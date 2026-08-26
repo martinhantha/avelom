@@ -20,6 +20,7 @@ export interface SuperadminUser {
   email: string;
   name: string | null;
   isSuperadmin: boolean;
+  disabledAt: string | null;
   memberships: SuperadminUserMembership[];
 }
 

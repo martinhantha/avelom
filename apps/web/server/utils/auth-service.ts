@@ -20,7 +20,7 @@ export async function issueTokensForUser(userId: string): Promise<AuthTokens> {
 
 export type LoginResult =
   | { ok: true; tokens: AuthTokens }
-  | { ok: false; code: "VALIDATION_ERROR" | "UNAUTHORIZED" };
+  | { ok: false; code: "VALIDATION_ERROR" | "UNAUTHORIZED" | "DISABLED" };
 
 export async function loginWithEmailPassword(email: string, password: string): Promise<LoginResult> {
   const normalized = email.trim().toLowerCase();
@@ -29,13 +29,16 @@ export async function loginWithEmailPassword(email: string, password: string): P
   }
 
   const row = await prisma.user.findUnique({ where: { email: normalized } });
-  if (!row?.passwordHash) {
+  if (!row?.passwordHash || row.deletedAt) {
     return { ok: false, code: "UNAUTHORIZED" };
   }
 
   const match = await bcrypt.compare(password, row.passwordHash);
   if (!match) {
     return { ok: false, code: "UNAUTHORIZED" };
+  }
+  if (row.disabledAt) {
+    return { ok: false, code: "DISABLED" };
   }
 
   const tokens = await issueTokensForUser(row.id);

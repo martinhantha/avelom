@@ -12,12 +12,14 @@ export default defineEventHandler(async (event) => {
       select: { id: true, name: true, slug: true, useDefaultDuration: true, createdAt: true },
     }),
     prisma.user.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
         email: true,
         name: true,
         isSuperadmin: true,
+        disabledAt: true,
         memberships: {
           where: { deletedAt: null },
           select: {
@@ -42,6 +44,7 @@ export default defineEventHandler(async (event) => {
       email: u.email,
       name: u.name,
       isSuperadmin: u.isSuperadmin,
+      disabledAt: u.disabledAt?.toISOString() ?? null,
       memberships: u.memberships.map((m) => ({
         tenantId: m.tenant.id,
         tenantName: m.tenant.name,

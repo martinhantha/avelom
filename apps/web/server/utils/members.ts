@@ -1,10 +1,18 @@
 import bcrypt from "bcryptjs";
 import { TenantRole } from "@prisma/client";
 import { prisma } from "~/server/utils/prisma";
-import { throwConflict, throwNotFound, throwValidation } from "~/server/utils/api-errors";
+import { throwApiError, throwConflict, throwNotFound, throwValidation } from "~/server/utils/api-errors";
 import { assertUuid } from "~/server/utils/authz";
 
-const allowedRoles: TenantRole[] = [TenantRole.ADMIN, TenantRole.STAFF, TenantRole.END_CUSTOMER];
+const userPublicSelect = {
+  id: true,
+  email: true,
+  name: true,
+  isSuperadmin: true,
+  disabledAt: true,
+} as const;
+
+export type UserActor = { id: string; isSuperadmin: boolean };
 
 function normalizeRole(value: unknown): TenantRole {
   if (typeof value !== "string" || !allowedRoles.includes(value as TenantRole)) {
@@ -13,7 +21,7 @@ function normalizeRole(value: unknown): TenantRole {
   return value as TenantRole;
 }
 
-function normalizeEmail(value: unknown): string {
+export function normalizeEmail(value: unknown): string {
   if (typeof value !== "string") {
     throwValidation("E-Mail ist erforderlich", { field: "email" });
   }
@@ -24,6 +32,16 @@ function normalizeEmail(value: unknown): string {
   return email;
 }
 
+export async function assertEmailAvailable(email: string, excludeUserId?: string) {
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+  if (existing && existing.id !== excludeUserId) {
+    throwConflict("Diese E-Mail ist bereits vergeben", { field: "email" });
+  }
+}
+
 function normalizeName(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const name = value.trim();
@@ -32,14 +50,14 @@ function normalizeName(value: unknown): string | null {
 
 export async function listTenantMembers(tenantId: string) {
   const memberships = await prisma.membership.findMany({
-    where: { tenantId, deletedAt: null },
+    where: { tenantId, deletedAt: null, user: { deletedAt: null } },
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
       role: true,
       createdAt: true,
       user: {
-        select: { id: true, email: true, name: true, isSuperadmin: true },
+        select: userPublicSelect,
       },
     },
   });
@@ -49,7 +67,10 @@ export async function listTenantMembers(tenantId: string) {
       membershipId: m.id,
       role: m.role,
       createdAt: m.createdAt.toISOString(),
-      user: m.user,
+      user: {
+        ...m.user,
+        disabledAt: m.user.disabledAt?.toISOString() ?? null,
+      },
     })),
   };
 }
@@ -61,9 +82,9 @@ export async function addTenantMember(tenantId: string, rawBody: unknown) {
   const name = normalizeName(body.name);
   const passwordRaw = typeof body.password === "string" ? body.password : "";
 
-  let user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, email: true, name: true, isSuperadmin: true, passwordHash: true },
+  let user = await prisma.user.findFirst({
+    where: { email, deletedAt: null },
+    select: { ...userPublicSelect, passwordHash: true },
   });
 
   if (!user) {
@@ -73,7 +94,7 @@ export async function addTenantMember(tenantId: string, rawBody: unknown) {
     const passwordHash = await bcrypt.hash(passwordRaw, 10);
     user = await prisma.user.create({
       data: { email, name, passwordHash, isSuperadmin: false },
-      select: { id: true, email: true, name: true, isSuperadmin: true, passwordHash: true },
+      select: { ...userPublicSelect, passwordHash: true },
     });
   }
 
@@ -104,7 +125,13 @@ export async function addTenantMember(tenantId: string, rawBody: unknown) {
     membershipId: membership.id,
     role: membership.role,
     createdAt: membership.createdAt.toISOString(),
-    user: { id: user.id, email: user.email, name: user.name, isSuperadmin: user.isSuperadmin },
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      isSuperadmin: user.isSuperadmin,
+      disabledAt: user.disabledAt?.toISOString() ?? null,
+    },
   };
 }
 
@@ -112,6 +139,7 @@ export async function updateTenantMember(
   tenantId: string,
   userIdInput: string | undefined,
   rawBody: unknown,
+  actor: UserActor,
 ) {
   const userId = assertUuid(userIdInput, "userId");
   const body = (rawBody ?? {}) as Record<string, unknown>;
@@ -124,7 +152,12 @@ export async function updateTenantMember(
     throwNotFound("Mitgliedschaft nicht gefunden", { tenantId, userId });
   }
 
-  const userUpdate: { name?: string | null; passwordHash?: string } = {};
+  const userUpdate: { email?: string; name?: string | null; passwordHash?: string } = {};
+  if (hasOwn(body, "email")) {
+    const email = normalizeEmail(body.email);
+    await assertEmailAvailable(email, userId);
+    userUpdate.email = email;
+  }
   if (hasOwn(body, "name")) {
     userUpdate.name = normalizeName(body.name);
   }
@@ -143,42 +176,53 @@ export async function updateTenantMember(
     membershipUpdate.role = normalizeRole(body.role);
   }
 
-  if (!Object.keys(userUpdate).length && !Object.keys(membershipUpdate).length) {
+  const wantsDisabled = hasOwn(body, "disabled");
+  if (!Object.keys(userUpdate).length && !Object.keys(membershipUpdate).length && !wantsDisabled) {
     throwValidation("Keine Änderungen übermittelt");
   }
 
-  const [updatedMembership] = await prisma.$transaction([
-    prisma.membership.update({
-      where: { id: membership.id },
-      data: membershipUpdate,
-      select: {
-        id: true,
-        role: true,
-        createdAt: true,
-        user: { select: { id: true, email: true, name: true, isSuperadmin: true } },
-      },
-    }),
-    ...(Object.keys(userUpdate).length
-      ? [prisma.user.update({ where: { id: userId }, data: userUpdate })]
-      : []),
-  ]);
+  if (wantsDisabled) {
+    await setUserDisabled(userId, Boolean(body.disabled), actor);
+  }
+
+  if (Object.keys(userUpdate).length || Object.keys(membershipUpdate).length) {
+    await prisma.$transaction([
+      ...(Object.keys(membershipUpdate).length
+        ? [
+            prisma.membership.update({
+              where: { id: membership.id },
+              data: membershipUpdate,
+              select: { id: true },
+            }),
+          ]
+        : []),
+      ...(Object.keys(userUpdate).length
+        ? [prisma.user.update({ where: { id: userId }, data: userUpdate })]
+        : []),
+    ]);
+  }
 
   const refreshed = await prisma.membership.findUnique({
-    where: { id: updatedMembership.id },
+    where: { id: membership.id },
     select: {
       id: true,
       role: true,
       createdAt: true,
-      user: { select: { id: true, email: true, name: true, isSuperadmin: true } },
+      user: { select: userPublicSelect },
     },
   });
+  if (!refreshed) {
+    throwNotFound("Mitgliedschaft nicht gefunden", { tenantId, userId });
+  }
 
-  const result = refreshed ?? updatedMembership;
   return {
-    membershipId: result.id,
-    role: result.role,
-    createdAt: result.createdAt.toISOString(),
-    user: result.user,
+    membershipId: refreshed.id,
+    role: refreshed.role,
+    createdAt: refreshed.createdAt.toISOString(),
+    user: {
+      ...refreshed.user,
+      disabledAt: refreshed.user.disabledAt?.toISOString() ?? null,
+    },
   };
 }
 
@@ -211,4 +255,72 @@ export async function removeTenantMember(
       });
     }
   });
+}
+
+export async function setUserDisabled(userId: string, disabled: boolean, actor: UserActor) {
+  if (userId === actor.id) {
+    throwValidation(disabled ? "Du kannst dich nicht selbst sperren" : "Du kannst dich nicht selbst entsperren");
+  }
+  const target = await prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    select: { id: true, isSuperadmin: true },
+  });
+  if (!target) {
+    throwNotFound("Benutzer nicht gefunden", { userId });
+  }
+  if (target.isSuperadmin && !actor.isSuperadmin) {
+    throwApiError(403, "FORBIDDEN", "Superadmin kann nicht gesperrt werden");
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { disabledAt: disabled ? new Date() : null },
+  });
+}
+
+export async function softDeleteUser(userId: string, actor: UserActor, tenantId?: string) {
+  if (userId === actor.id) {
+    throwValidation("Du kannst dich nicht selbst löschen");
+  }
+  const target = await prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    select: {
+      id: true,
+      isSuperadmin: true,
+      memberships: { where: { deletedAt: null }, select: { tenantId: true } },
+    },
+  });
+  if (!target) {
+    throwNotFound("Benutzer nicht gefunden", { userId });
+  }
+  if (target.isSuperadmin && !actor.isSuperadmin) {
+    throwApiError(403, "FORBIDDEN", "Superadmin kann nicht gelöscht werden");
+  }
+  if (!actor.isSuperadmin) {
+    if (!tenantId) {
+      throwApiError(403, "FORBIDDEN", "Keine Berechtigung, diesen Benutzer zu löschen");
+    }
+    const inTenant = target.memberships.some((m) => m.tenantId === tenantId);
+    if (!inTenant) {
+      throwNotFound("Mitgliedschaft nicht gefunden", { tenantId, userId });
+    }
+    const otherTenants = target.memberships.filter((m) => m.tenantId !== tenantId);
+    if (otherTenants.length) {
+      throwConflict(
+        "Benutzer ist noch in anderen Mandanten und kann nur von einem Superadmin gelöscht werden",
+        { otherTenantCount: otherTenants.length },
+      );
+    }
+  }
+
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { deletedAt: now, deletedByUserId: actor.id, disabledAt: now },
+    }),
+    prisma.membership.updateMany({
+      where: { userId, deletedAt: null },
+      data: { deletedAt: now, deletedByUserId: actor.id },
+    }),
+  ]);
 }

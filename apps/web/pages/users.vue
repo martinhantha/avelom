@@ -16,6 +16,7 @@ interface UserItem {
   email: string;
   name: string | null;
   isSuperadmin: boolean;
+  disabledAt: string | null;
   memberships: MembershipInfo[];
   membershipIdInActive: string | null;
   roleInActive: TenantRole | null;
@@ -24,7 +25,7 @@ interface UserItem {
 interface MemberApiItem {
   membershipId: string;
   role: TenantRole;
-  user: { id: string; email: string; name: string | null; isSuperadmin: boolean };
+  user: { id: string; email: string; name: string | null; isSuperadmin: boolean; disabledAt: string | null };
 }
 
 interface SuperadminUser {
@@ -32,6 +33,7 @@ interface SuperadminUser {
   email: string;
   name: string | null;
   isSuperadmin: boolean;
+  disabledAt: string | null;
   memberships: MembershipInfo[];
 }
 interface SuperadminTenant {
@@ -77,6 +79,7 @@ const addForm = reactive({
 const editOpen = ref(false);
 const editingUser = ref<UserItem | null>(null);
 const editForm = reactive({
+  email: "",
   name: "",
   password: "",
   role: "STAFF" as TenantRole,
@@ -118,6 +121,13 @@ const addIsExistingUser = computed(
   () => addEmailNormalized.value.length > 0 && existingUserEmails.value.has(addEmailNormalized.value),
 );
 const addPasswordRequired = computed(() => !addIsExistingUser.value);
+const editEmailNormalized = computed(() => editForm.email.trim().toLowerCase());
+const editEmailTaken = computed(() => {
+  if (!editingUser.value || !editEmailNormalized.value) return false;
+  return users.value.some(
+    (item) => item.id !== editingUser.value!.id && item.email.toLowerCase() === editEmailNormalized.value,
+  );
+});
 
 const roleOptions: TenantRole[] = ["ADMIN", "STAFF", "END_CUSTOMER"];
 
@@ -186,6 +196,7 @@ async function loadUsers() {
           email: u.email,
           name: u.name,
           isSuperadmin: u.isSuperadmin,
+          disabledAt: u.disabledAt,
           memberships: u.memberships,
           membershipIdInActive: active ? active.tenantId : null,
           roleInActive: active ? active.role : null,
@@ -205,6 +216,7 @@ async function loadUsers() {
         email: m.user.email,
         name: m.user.name,
         isSuperadmin: m.user.isSuperadmin,
+        disabledAt: m.user.disabledAt,
         memberships: [
           {
             tenantId: primaryTenant.value!.tenantId,
@@ -308,6 +320,7 @@ async function submitAdd() {
 
 function openEdit(userItem: UserItem) {
   editingUser.value = userItem;
+  editForm.email = userItem.email;
   editForm.name = userItem.name ?? "";
   editForm.password = "";
   editForm.role = userItem.roleInActive ?? "STAFF";
@@ -362,6 +375,15 @@ function toggleMembershipRemove(item: EditableMembership) {
 async function submitEdit() {
   if (!editingUser.value) return;
   clearDialogMessages();
+  const email = editForm.email.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    setDialogError("Gültige E-Mail ist erforderlich");
+    return;
+  }
+  if (editEmailTaken.value) {
+    setDialogError("Diese E-Mail ist bereits vergeben");
+    return;
+  }
   if (editForm.password.trim().length > 0 && editForm.password.trim().length < 6) {
     setDialogError("Passwort muss mindestens 6 Zeichen haben");
     return;
@@ -380,6 +402,9 @@ async function submitEdit() {
     const activeTenantId = primaryTenant.value?.tenantId;
     const tenantBody: Record<string, unknown> = {};
     if (activeTenantId && target.roleInActive) {
+      if (email !== target.email.toLowerCase()) {
+        tenantBody.email = email;
+      }
       if (editForm.name.trim() !== (target.name ?? "")) {
         tenantBody.name = editForm.name.trim() || null;
       }
@@ -404,6 +429,12 @@ async function submitEdit() {
 
     if (isSuperadmin.value) {
       const adminBody: Record<string, unknown> = {};
+      if (
+        !tenantBody.email &&
+        email !== target.email.toLowerCase()
+      ) {
+        adminBody.email = email;
+      }
       if (
         !tenantBody.name &&
         editForm.name.trim() !== (target.name ?? "")
@@ -507,6 +538,95 @@ async function removeFromTenant(userItem: UserItem) {
     await loadUsers();
   } catch (e: unknown) {
     setError(apiMessage(e, "Benutzer konnte nicht entfernt werden"));
+  } finally {
+    savingId.value = "";
+  }
+}
+
+function isSelf(userItem: UserItem) {
+  return user.value?.id === userItem.id;
+}
+
+function canLockUser(userItem: UserItem) {
+  if (!canEdit.value || isSelf(userItem)) return false;
+  if (userItem.isSuperadmin && !isSuperadmin.value) return false;
+  return true;
+}
+
+function canDeleteUser(userItem: UserItem) {
+  if (!canLockUser(userItem)) return false;
+  if (isSuperadmin.value) return true;
+  return userItem.memberships.every((m) => m.tenantId === primaryTenant.value?.tenantId);
+}
+
+async function toggleDisabled(userItem: UserItem) {
+  if (!canLockUser(userItem)) return;
+  const lock = !userItem.disabledAt;
+  if (
+    !confirm(
+      lock
+        ? `Benutzer ${userItem.email} sperren? Die Person kann sich dann nicht mehr anmelden.`
+        : `Sperre für ${userItem.email} aufheben?`,
+    )
+  ) {
+    return;
+  }
+  savingId.value = userItem.id;
+  try {
+    if (isSuperadmin.value) {
+      await $fetch(`/api/admin/users/${userItem.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        body: { disabled: lock },
+      });
+    } else if (primaryTenant.value?.tenantId) {
+      await $fetch(`/api/v1/tenants/${primaryTenant.value.tenantId}/members/${userItem.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        body: { disabled: lock },
+      });
+    }
+    setInfo(lock ? `${userItem.email} gesperrt` : `${userItem.email} entsperrt`);
+    if (editingUser.value?.id === userItem.id) {
+      editingUser.value = { ...editingUser.value, disabledAt: lock ? new Date().toISOString() : null };
+    }
+    await loadUsers();
+  } catch (e: unknown) {
+    setError(apiMessage(e, "Benutzerstatus konnte nicht geändert werden"));
+  } finally {
+    savingId.value = "";
+  }
+}
+
+async function deleteUserAccount(userItem: UserItem) {
+  if (!canDeleteUser(userItem)) return;
+  if (
+    !confirm(
+      `Benutzerkonto ${userItem.email} wirklich löschen? Die Person wird abgemeldet und erscheint nicht mehr in der Benutzerliste.`,
+    )
+  ) {
+    return;
+  }
+  savingId.value = userItem.id;
+  try {
+    if (isSuperadmin.value) {
+      await $fetch(`/api/admin/users/${userItem.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+    } else if (primaryTenant.value?.tenantId) {
+      await $fetch(`/api/v1/tenants/${primaryTenant.value.tenantId}/users/${userItem.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+    }
+    setInfo(`${userItem.email} gelöscht`);
+    editOpen.value = false;
+    editingUser.value = null;
+    await loadUsers();
+  } catch (e: unknown) {
+    setError(apiMessage(e, "Benutzer konnte nicht gelöscht werden"));
+    setDialogError(apiMessage(e, "Benutzer konnte nicht gelöscht werden"));
   } finally {
     savingId.value = "";
   }
@@ -618,6 +738,7 @@ watch(
             <p class="text-xs text-neutral-500 truncate">{{ u.email }}</p>
             <div class="mt-2 flex flex-wrap gap-1 items-center">
               <UBadge v-if="u.isSuperadmin" color="secondary" variant="soft">SUPERADMIN</UBadge>
+              <UBadge v-if="u.disabledAt" color="warning" variant="soft">Gesperrt</UBadge>
             </div>
             <div class="mt-2">
               <p class="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">
@@ -659,22 +780,54 @@ watch(
               color="neutral"
               variant="ghost"
               icon="i-lucide-pencil"
+              aria-label="Bearbeiten"
+              title="Bearbeiten"
               :disabled="!canEdit || (!isSuperadmin && !u.roleInActive)"
               @click="openEdit(u)"
             >
-              Bearbeiten
+              <span class="hidden sm:inline">Bearbeiten</span>
+            </UButton>
+            <UButton
+              v-if="canLockUser(u)"
+              size="sm"
+              :color="u.disabledAt ? 'success' : 'warning'"
+              variant="ghost"
+              :icon="u.disabledAt ? 'i-lucide-unlock' : 'i-lucide-lock'"
+              :aria-label="u.disabledAt ? 'Entsperren' : 'Sperren'"
+              :title="u.disabledAt ? 'Entsperren' : 'Sperren'"
+              :disabled="savingId === u.id"
+              :loading="savingId === u.id"
+              @click="toggleDisabled(u)"
+            >
+              <span class="hidden sm:inline">{{ u.disabledAt ? "Entsperren" : "Sperren" }}</span>
             </UButton>
             <UButton
               v-if="u.roleInActive"
               size="sm"
               color="error"
               variant="ghost"
-              icon="i-lucide-trash-2"
+              icon="i-lucide-user-minus"
+              aria-label="Aus Mandant entfernen"
+              title="Aus Mandant entfernen"
               :disabled="!canEdit"
               :loading="savingId === u.id"
               @click="removeFromTenant(u)"
             >
-              Entfernen
+              <span class="hidden sm:inline">Entfernen</span>
+            </UButton>
+            <UButton
+              v-if="canDeleteUser(u)"
+              size="sm"
+              color="error"
+              variant="ghost"
+              icon="i-lucide-trash-2"
+              aria-label="Konto löschen"
+              title="Konto löschen"
+              :disabled="savingId === u.id"
+              :loading="savingId === u.id"
+              @click="deleteUserAccount(u)"
+            >
+              <span class="hidden sm:inline">Löschen</span>
             </UButton>
           </div>
         </div>
@@ -687,6 +840,7 @@ watch(
           <div class="min-w-0">
             <h2 class="font-medium truncate">Benutzer bearbeiten</h2>
             <p class="text-xs text-neutral-500 truncate">{{ editingUser?.email }}</p>
+            <UBadge v-if="editingUser?.disabledAt" color="warning" variant="soft" class="mt-1">Gesperrt</UBadge>
           </div>
           <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="editOpen = false" />
         </div>
@@ -694,6 +848,16 @@ watch(
       <template #body>
         <form class="space-y-4" @submit.prevent="submitEdit">
           <UAlert v-if="dialogError" color="error" variant="soft" icon="i-lucide-circle-alert" :title="dialogError" />
+          <UFormField label="E-Mail" required hint="muss eindeutig sein">
+            <UInput v-model="editForm.email" type="email" autocomplete="off" />
+          </UFormField>
+          <UAlert
+            v-if="editEmailTaken"
+            color="error"
+            variant="subtle"
+            icon="i-lucide-circle-alert"
+            title="Diese E-Mail ist bereits vergeben"
+          />
           <UFormField label="Name">
             <UInput v-model="editForm.name" />
           </UFormField>
@@ -792,11 +956,35 @@ watch(
         </form>
       </template>
       <template #footer>
-        <div class="flex justify-end gap-2 w-full">
-          <UButton variant="ghost" color="neutral" @click="editOpen = false">Abbrechen</UButton>
-          <UButton color="primary" :loading="loading" icon="i-lucide-save" @click="submitEdit">
-            Speichern
-          </UButton>
+        <div class="flex justify-between gap-2 w-full flex-wrap">
+          <div class="flex gap-2">
+            <UButton
+              v-if="editingUser && canLockUser(editingUser)"
+              variant="outline"
+              :color="editingUser.disabledAt ? 'success' : 'warning'"
+              :icon="editingUser.disabledAt ? 'i-lucide-unlock' : 'i-lucide-lock'"
+              :loading="savingId === editingUser.id"
+              @click="toggleDisabled(editingUser)"
+            >
+              {{ editingUser.disabledAt ? "Entsperren" : "Sperren" }}
+            </UButton>
+            <UButton
+              v-if="editingUser && canDeleteUser(editingUser)"
+              variant="outline"
+              color="error"
+              icon="i-lucide-trash-2"
+              :loading="savingId === editingUser.id"
+              @click="deleteUserAccount(editingUser)"
+            >
+              Konto löschen
+            </UButton>
+          </div>
+          <div class="flex gap-2 ml-auto">
+            <UButton variant="ghost" color="neutral" @click="editOpen = false">Abbrechen</UButton>
+            <UButton color="primary" :loading="loading" icon="i-lucide-save" :disabled="editEmailTaken" @click="submitEdit">
+              Speichern
+            </UButton>
+          </div>
         </div>
       </template>
     </UModal>

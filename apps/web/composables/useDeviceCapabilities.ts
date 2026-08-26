@@ -17,10 +17,16 @@ const ssrSafe: DeviceCapabilities = {
   saveOrUpdateDeviceContact: (payload) => fallback.saveOrUpdateDeviceContact(payload),
 };
 
+export function installRuntimeDevice(device: DeviceCapabilities) {
+  sharedDevice.value = device;
+  deviceReady.value = true;
+}
+
 export function useDeviceCapabilities() {
   const nuxtApp = useNuxtApp();
 
   onMounted(() => {
+    if (deviceReady.value) return;
     sharedDevice.value = (nuxtApp.$device as DeviceCapabilities | undefined) ?? fallback;
     deviceReady.value = true;
   });
@@ -30,9 +36,7 @@ export function useDeviceCapabilities() {
   async function refresh() {
     if (!import.meta.client) return;
     const { createRuntimeDeviceCapabilities } = await import("../utils/create-device-capabilities");
-    sharedDevice.value = createRuntimeDeviceCapabilities();
-    nuxtApp.$device = sharedDevice.value;
-    deviceReady.value = true;
+    installRuntimeDevice(createRuntimeDeviceCapabilities());
   }
 
   async function setCallHintsOptIn(enabled: boolean) {

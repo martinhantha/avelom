@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { TenantRole } from "@prisma/client";
 import { prisma } from "~/server/utils/prisma";
 import { requireSuperadmin } from "~/server/utils/authz";
+import { assertEmailAvailable, normalizeEmail } from "~/server/utils/members";
 
 export default defineEventHandler(async (event) => {
   await requireSuperadmin(event);
@@ -14,14 +15,12 @@ export default defineEventHandler(async (event) => {
     role?: TenantRole;
   }>(event);
 
-  const email = body.email?.trim().toLowerCase();
+  const email = normalizeEmail(body.email);
+  await assertEmailAvailable(email);
   const password = body.password ?? "";
   const name = body.name?.trim() || null;
   const isSuperadmin = Boolean(body.isSuperadmin);
 
-  if (!email || !email.includes("@")) {
-    throw createError({ statusCode: 400, statusMessage: "Gültige E-Mail ist erforderlich" });
-  }
   if (password.length < 6) {
     throw createError({ statusCode: 400, statusMessage: "Passwort muss mindestens 6 Zeichen haben" });
   }

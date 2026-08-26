@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "disabledAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN "deletedAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN "deletedByUserId" UUID;

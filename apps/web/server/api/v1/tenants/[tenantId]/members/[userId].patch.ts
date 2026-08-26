@@ -5,5 +5,8 @@ import { updateTenantMember } from "~/server/utils/members";
 export default defineEventHandler(async (event) => {
   const access = await requireTenantAccess(event, getRouterParam(event, "tenantId"), ["ADMIN"]);
   const body = await readBody(event);
-  return updateTenantMember(access.tenant.id, getRouterParam(event, "userId"), body);
+  return updateTenantMember(access.tenant.id, getRouterParam(event, "userId"), body, {
+    id: access.actorUserId,
+    isSuperadmin: access.session.user.isSuperadmin,
+  });
 });

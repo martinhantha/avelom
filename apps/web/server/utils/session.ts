@@ -2,8 +2,8 @@ import type { AuthSession } from "~/types/auth";
 import { prisma } from "./prisma";
 
 export async function loadUserWithMemberships(userId: string) {
-  return prisma.user.findUnique({
-    where: { id: userId },
+  return prisma.user.findFirst({
+    where: { id: userId, deletedAt: null, disabledAt: null },
     include: {
       memberships: {
         where: { deletedAt: null },

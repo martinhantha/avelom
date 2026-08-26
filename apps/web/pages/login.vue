@@ -7,7 +7,7 @@ definePageMeta({
 const config = useRuntimeConfig().public;
 const { login } = useAuth();
 
-const email = ref(config.demoEmail);
+const email = ref();
 const password = ref("");
 const pending = ref(false);
 const errorMsg = ref("");
@@ -87,17 +87,11 @@ async function onSubmit() {
           </UButton>
         </form>
 
-        <template #footer>
+        <!-- <template #footer>
           <p class="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
-            Nach
-            <code class="rounded bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 text-[0.7rem]">pnpm db:seed</code>
-            gibt es den Demo-Nutzer
-            <strong>{{ config.demoEmail }}</strong>
-            mit Standardpasswort
-            <code class="rounded bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 text-[0.7rem]">demo123</code>
-            (oder dem Wert von <code class="text-[0.65rem]">SEED_DEMO_PASSWORD</code>).
+           
           </p>
-        </template>
+        </template> -->
       </UCard>
     </div>
   </div>

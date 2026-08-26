@@ -108,6 +108,9 @@ model User {
   updatedAt DateTime @updatedAt
   /// Superadmin flag; tenant roles live on Membership
   isSuperadmin Boolean @default(false)
+  disabledAt DateTime?
+  deletedAt DateTime?
+  deletedByUserId String? @db.Uuid
 
   memberships          Membership[]
   assistantPreferences UserAssistantPreference[]
