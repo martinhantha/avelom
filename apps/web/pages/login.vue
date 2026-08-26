@@ -38,8 +38,8 @@ async function onSubmit() {
     class="min-h-dvh flex flex-col items-center justify-center p-6 pt-[max(1.5rem,var(--app-safe-top))] pb-[max(1.5rem,var(--app-safe-bottom))] bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50"
   >
     <div class="w-full max-w-md space-y-6">
-      <div class="text-center space-y-1">
-        <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">Avelom</p>
+      <div class="text-center space-y-3">
+        <AppLogo class="mx-auto h-10" />
         <h1 class="text-2xl font-semibold tracking-tight">Anmelden</h1>
         <p class="text-sm text-neutral-600 dark:text-neutral-400">
           Mitorganisation und Nutzerkontext für die Prototyp-Seiten.

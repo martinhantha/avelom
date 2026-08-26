@@ -36,26 +36,9 @@ export function toWhatsAppHref(
   const app = options?.app ?? "whatsapp";
   const platform = options?.platform ?? "web";
 
-  if (app === "business") {
-    if (platform === "android") {
-      return `intent://send?phone=${digits}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end`;
-    }
-    if (platform === "ios") {
-      return `whatsapp-business://send?phone=${digits}`;
-    }
+  if (app === "business" && (platform === "android" || platform === "ios")) {
+    return `whatsapp-business://send?phone=${digits}`;
   }
 
   return `https://wa.me/${digits}`;
-}
-
-export function openWhatsAppUrl(href: string) {
-  if (href.startsWith("http://") || href.startsWith("https://")) {
-    window.open(href, "_blank", "noopener,noreferrer");
-    return;
-  }
-  const link = document.createElement("a");
-  link.href = href;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
 }

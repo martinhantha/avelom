@@ -8,11 +8,8 @@ const { user, primaryTenant, logout } = useAuth();
   >
     <UContainer class="flex h-14 items-center justify-between gap-4">
       <div class="flex items-center gap-3 min-w-0">
-        <NuxtLink
-          to="/"
-          class="font-semibold tracking-tight text-neutral-900 dark:text-white shrink-0"
-        >
-          Avelom
+        <NuxtLink to="/" class="inline-flex items-center shrink-0" aria-label="Avelom">
+          <AppLogo class="h-7" />
         </NuxtLink>
         <span
           v-if="primaryTenant"

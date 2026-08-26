@@ -8,7 +8,7 @@ import {
   toTelHref,
   type AppointmentContactSource,
 } from "../utils/appointment-contact";
-import { openWhatsAppUrl, toWhatsAppHref, whatsappAppLabel } from "../utils/whatsapp";
+import { toWhatsAppHref, whatsappAppLabel } from "../utils/whatsapp";
 
 const props = withDefaults(
   defineProps<{
@@ -45,12 +45,7 @@ const whatsappHref = computed(() =>
   phone.value ? toWhatsAppHref(phone.value, { app: whatsappApp.value, platform: device.value.platform }) : null,
 );
 const whatsappLabel = computed(() => whatsappAppLabel(whatsappApp.value));
-
-function openWhatsApp(event: Event) {
-  if (!whatsappHref.value) return;
-  event.preventDefault();
-  openWhatsAppUrl(whatsappHref.value);
-}
+const whatsappIsHttp = computed(() => Boolean(whatsappHref.value?.startsWith("https://")));
 
 const canSaveContact = computed(() => device.value.features.saveContact && Boolean(phone.value));
 const canComplete = computed(
@@ -109,6 +104,8 @@ async function saveDeviceContact() {
     <UButton
       v-if="whatsappHref"
       :href="whatsappHref"
+      :target="whatsappIsHttp ? '_blank' : undefined"
+      :rel="whatsappIsHttp ? 'noopener noreferrer' : undefined"
       :size="compact ? 'xs' : 'sm'"
       color="success"
       variant="soft"
@@ -116,7 +113,6 @@ async function saveDeviceContact() {
       :square="compact"
       :aria-label="`${whatsappLabel} öffnen`"
       :title="whatsappLabel"
-      @click="openWhatsApp"
     >
       <span v-if="!compact" class="hidden sm:inline">{{ whatsappLabel }}</span>
     </UButton>

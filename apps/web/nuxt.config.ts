@@ -47,6 +47,12 @@ export default defineNuxtConfig({
       meta: [
         { name: "description", content: "Avelom — Prototyp Schnellerfassung & Planung" },
         { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+        { name: "theme-color", content: "#000000" },
+      ],
+      link: [
+        { rel: "icon", type: "image/png", href: "/favicon.png" },
+        { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
+        { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       ],
     },
   },
