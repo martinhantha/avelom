@@ -12,6 +12,8 @@ const userPublicSelect = {
   disabledAt: true,
 } as const;
 
+const allowedRoles: TenantRole[] = [TenantRole.ADMIN, TenantRole.STAFF, TenantRole.END_CUSTOMER];
+
 export type UserActor = { id: string; isSuperadmin: boolean };
 
 function normalizeRole(value: unknown): TenantRole {
