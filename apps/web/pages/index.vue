@@ -128,7 +128,9 @@ const calendarDays = computed(() => {
   });
 });
 const selectedDateAppointments = computed(() =>
-  appointments.value.filter((appointment) => dateKeyFromIso(appointment.startsAt) === selectedDateKey.value),
+  appointments.value
+    .filter((appointment) => dateKeyFromIso(appointment.startsAt) === selectedDateKey.value)
+    .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime()),
 );
 
 async function loadAppointments() {
@@ -150,7 +152,8 @@ async function loadAppointments() {
         query: {
           from: from.toISOString(),
           to: to.toISOString(),
-          sort: "asc",
+          pageSize: 500,
+          sort: "desc",
         },
       },
     );
@@ -381,7 +384,7 @@ async function deleteAppointment(appointment: AppointmentListItem) {
       </p>
     </div>
 
-    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-3">
       <UCard>
         <p class="text-xs uppercase tracking-wide text-neutral-500">Termine (14 Tage)</p>
         <p class="mt-2 text-2xl font-semibold">{{ upcomingCount }}</p>
@@ -389,16 +392,6 @@ async function deleteAppointment(appointment: AppointmentListItem) {
       <UCard>
         <p class="text-xs uppercase tracking-wide text-neutral-500">Heute</p>
         <p class="mt-2 text-2xl font-semibold">{{ todayCount }}</p>
-      </UCard>
-      <UCard>
-        <p class="text-xs uppercase tracking-wide text-neutral-500">Gewählter Tag</p>
-        <p class="mt-2 text-2xl font-semibold">{{ selectedDateAppointments.length }}</p>
-      </UCard>
-      <UCard>
-        <p class="text-xs uppercase tracking-wide text-neutral-500">Status</p>
-        <p class="mt-2 text-sm font-medium text-neutral-600 dark:text-neutral-300">
-          {{ primaryTenant ? "Mandant aktiv" : "Kein Mandant" }}
-        </p>
       </UCard>
     </div>
 

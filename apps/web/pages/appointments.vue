@@ -173,7 +173,9 @@ async function loadAppointments() {
         },
       },
     );
-    appointments.value = response.data;
+    appointments.value = isCalendar
+      ? response.data
+      : [...response.data].sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
     pagination.value = response.pagination;
   } catch (e: unknown) {
     const err = e as { data?: { data?: { message?: string }; message?: string }; statusMessage?: string };
