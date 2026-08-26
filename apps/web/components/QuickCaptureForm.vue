@@ -6,7 +6,9 @@ import { isCallHintsOptIn } from "@avelom/device-capabilities";
 import { useAuth } from "../composables/useAuth";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
+import { Capacitor } from "@capacitor/core";
 import { resolveAppointmentPhone } from "../utils/appointment-contact";
+import { longestTranscript, mergeSpeechSegments, stitchTranscript } from "../utils/speech-transcript";
 
 type WebSpeechRecognitionEventResult = {
   isFinal: boolean;
@@ -127,8 +129,53 @@ const STOP_COMMAND_RE =
 
 let recognition: WebSpeechRecognition | null = null;
 let speechTextBase = "";
+let speechHypothesis = "";
 let parseAfterListen = false;
 let speechStopping = false;
+let speechRestartTimer: ReturnType<typeof setTimeout> | null = null;
+const androidSpeech = Capacitor.getPlatform() === "android";
+
+function clearSpeechRestart() {
+  if (speechRestartTimer == null) return;
+  clearTimeout(speechRestartTimer);
+  speechRestartTimer = null;
+}
+
+function collectSpoken(event: WebSpeechRecognitionEvent): { finalText: string; interimText: string } {
+  const finals: string[] = [];
+  const interims: string[] = [];
+  for (let i = 0; i < event.results.length; i += 1) {
+    const result = event.results[i];
+    const transcript = (result[0]?.transcript ?? "").replace(/\s+/g, " ").trim();
+    if (!transcript) continue;
+    if (result.isFinal) finals.push(transcript);
+    else interims.push(transcript);
+  }
+  if (androidSpeech) {
+    const hypothesis = longestTranscript([...finals, ...interims]);
+    const last = event.results[event.results.length - 1];
+    return last?.isFinal ? { finalText: hypothesis, interimText: "" } : { finalText: "", interimText: hypothesis };
+  }
+  return {
+    finalText: mergeSpeechSegments(finals),
+    interimText: interims.at(-1) ?? "",
+  };
+}
+
+function applySpoken(finalText: string, interimText: string) {
+  const incoming = (interimText || finalText).trim();
+  if (!incoming) return;
+  speechHypothesis = stitchTranscript(speechHypothesis, incoming);
+  const combined = stitchTranscript(speechTextBase, speechHypothesis);
+  const { cleaned, stop } = stripStopCommand(combined);
+  text.value = cleaned;
+  speechInterim.value = interimText;
+  if (!stop) return;
+  speechTextBase = cleaned;
+  speechHypothesis = "";
+  speechInterim.value = "";
+  stopListeningWithParse();
+}
 
 function stripStopCommand(value: string): { cleaned: string; stop: boolean } {
   const match = STOP_COMMAND_RE.exec(value);
@@ -142,6 +189,7 @@ function stopListeningWithParse() {
   speechListening.value = false;
   speechInterim.value = "";
   parseAfterListen = true;
+  clearSpeechRestart();
   if (!recognition) {
     parseAfterListen = false;
     speechStopping = false;
@@ -180,61 +228,44 @@ function setupSpeech() {
   recognition.maxAlternatives = 1;
   recognition.onresult = (event) => {
     if (speechStopping) return;
-    let finalChunk = "";
-    let interimChunk = "";
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const result = event.results[i];
-      const transcript = result[0]?.transcript ?? "";
-      if (result.isFinal) {
-        finalChunk += transcript;
-      } else {
-        interimChunk += transcript;
-      }
-    }
-    if (finalChunk) {
-      const combined = `${speechTextBase} ${finalChunk}`.replace(/\s+/g, " ").trim();
-      const { cleaned, stop } = stripStopCommand(combined);
-      speechTextBase = cleaned;
-      text.value = cleaned;
-      speechInterim.value = "";
-      if (stop) {
-        stopListeningWithParse();
-        return;
-      }
-    }
-    if (interimChunk) {
-      const combined = `${speechTextBase} ${interimChunk}`.replace(/\s+/g, " ").trim();
-      const { cleaned, stop } = stripStopCommand(combined);
-      if (stop) {
-        speechTextBase = cleaned;
-        text.value = cleaned;
-        speechInterim.value = "";
-        stopListeningWithParse();
-        return;
-      }
-      speechInterim.value = interimChunk;
-      text.value = combined;
-    }
+    const { finalText, interimText } = collectSpoken(event);
+    applySpoken(finalText, interimText);
   };
   recognition.onerror = (event) => {
+    if (event.error === "aborted" || event.error === "no-speech") return;
     speechError.value =
       event.error === "not-allowed"
         ? device.value.platform === "web"
           ? "Mikrofon-Zugriff verweigert – bitte im Browser erlauben."
           : "Mikrofon-Zugriff verweigert – bitte in den App-Einstellungen erlauben."
-        : event.error === "no-speech"
-          ? "Keine Sprache erkannt."
-          : event.message || event.error || "Sprachaufnahme fehlgeschlagen.";
+        : event.message || event.error || "Sprachaufnahme fehlgeschlagen.";
   };
   recognition.onend = () => {
-    speechListening.value = false;
     speechInterim.value = "";
     const shouldParse = parseAfterListen;
     parseAfterListen = false;
-    speechStopping = false;
-    if (shouldParse) {
-      void parseFromText();
+    if (speechStopping || shouldParse) {
+      speechStopping = false;
+      speechListening.value = false;
+      speechTextBase = text.value.trim();
+      speechHypothesis = "";
+      if (shouldParse) void parseFromText();
+      return;
     }
+    if (speechListening.value && recognition) {
+      speechRestartTimer = setTimeout(() => {
+        speechRestartTimer = null;
+        if (!speechListening.value || speechStopping || !recognition) return;
+        try {
+          recognition.start();
+        } catch {
+          speechListening.value = false;
+        }
+      }, 200);
+      return;
+    }
+    speechListening.value = false;
+    speechStopping = false;
   };
 }
 
@@ -242,6 +273,8 @@ async function toggleSpeech() {
   if (!recognition) return;
   speechError.value = "";
   if (speechListening.value) {
+    speechListening.value = false;
+    clearSpeechRestart();
     recognition.stop();
     return;
   }
@@ -254,8 +287,10 @@ async function toggleSpeech() {
     return;
   }
   speechTextBase = text.value.trim();
+  speechHypothesis = "";
   speechInterim.value = "";
   speechStopping = false;
+  clearSpeechRestart();
   try {
     recognition.start();
     speechListening.value = true;
@@ -275,6 +310,8 @@ function toggleVoiceAssistant() {
   }
   if (speechListening.value) {
     parseAfterListen = true;
+    speechListening.value = false;
+    clearSpeechRestart();
     recognition.stop();
     return;
   }
@@ -349,7 +386,10 @@ function answerQuestion(questionId: string, value: string) {
 }
 
 onBeforeUnmount(() => {
-  if (recognition && speechListening.value) {
+  speechListening.value = false;
+  speechStopping = true;
+  clearSpeechRestart();
+  if (recognition) {
     try {
       recognition.abort();
     } catch {

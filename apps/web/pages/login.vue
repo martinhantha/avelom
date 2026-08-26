@@ -35,7 +35,7 @@ async function onSubmit() {
 
 <template>
   <div
-    class="min-h-dvh flex flex-col items-center justify-center p-6 bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50"
+    class="min-h-dvh flex flex-col items-center justify-center p-6 pt-[max(1.5rem,var(--app-safe-top))] pb-[max(1.5rem,var(--app-safe-bottom))] bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50"
   >
     <div class="w-full max-w-md space-y-6">
       <div class="text-center space-y-1">

@@ -36,7 +36,10 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: "Avelom",
-      meta: [{ name: "description", content: "Avelom — Prototyp Schnellerfassung & Planung" }],
+      meta: [
+        { name: "description", content: "Avelom — Prototyp Schnellerfassung & Planung" },
+        { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      ],
     },
   },
 });

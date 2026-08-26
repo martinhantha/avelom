@@ -19,9 +19,9 @@ const links = computed(() => {
 </script>
 
 <template>
-  <div class="min-h-dvh bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
+  <div class="min-h-dvh bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50 pb-[var(--app-safe-bottom)]">
     <aside
-      class="hidden lg:flex fixed inset-y-0 left-0 z-20 w-72 xl:w-80 border-r border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950"
+      class="hidden lg:flex fixed inset-y-0 left-0 z-20 w-72 xl:w-80 border-r border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 pt-[var(--app-safe-top)]"
     >
       <div class="flex w-full h-dvh max-h-dvh flex-col p-4 gap-4 overflow-hidden">
         <div class="px-2 pt-2 shrink-0">
@@ -68,7 +68,7 @@ const links = computed(() => {
     <div class="flex w-full">
       <div class="hidden lg:block lg:w-72 xl:w-80 shrink-0" aria-hidden="true" />
       <div class="min-w-0 flex-1">
-        <header class="sticky top-0 z-10 border-b border-neutral-200 dark:border-neutral-800 bg-white/85 dark:bg-neutral-950/85 backdrop-blur lg:hidden">
+        <header class="sticky top-0 z-10 border-b border-neutral-200 dark:border-neutral-800 bg-white/85 dark:bg-neutral-950/85 backdrop-blur lg:hidden pt-[var(--app-safe-top)]">
           <div class="px-4 py-3 flex items-center justify-between gap-3">
             <NuxtLink to="/" class="font-semibold tracking-tight">Avelom</NuxtLink>
             <div class="flex items-center gap-2">

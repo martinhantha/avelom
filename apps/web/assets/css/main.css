@@ -1,2 +1,18 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+:root {
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Android WebView often reports 0 for safe-area; keep content below the status bar. */
+html.capacitor-android {
+  --app-safe-top: max(env(safe-area-inset-top, 0px), 48px);
+  --app-safe-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+}
+
+html.capacitor-ios {
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
