@@ -1,13 +1,6 @@
 <script setup lang="ts">
 const { reminder, minutesLeft, teacherLabel, dismiss } = useAppointmentReminders();
 
-const open = computed({
-  get: () => Boolean(reminder.value),
-  set: (value) => {
-    if (!value) dismiss();
-  },
-});
-
 const when = computed(() => {
   if (!reminder.value) return "";
   return new Intl.DateTimeFormat("de-DE", {
@@ -26,32 +19,41 @@ async function openAppointment() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :ui="{ content: 'max-w-md' }">
-    <template v-if="reminder">
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UIcon name="i-lucide-bell-ring" class="size-5 text-primary-600" />
-          <h2 class="font-semibold">Terminerinnerung</h2>
+  <Teleport to="body">
+    <div
+      v-if="reminder"
+      class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40"
+      style="padding-top: max(1rem, var(--app-safe-top)); padding-bottom: max(1rem, var(--app-safe-bottom))"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="appointment-reminder-title"
+    >
+      <div class="w-full max-w-md rounded-xl border border-primary-200 dark:border-primary-800 bg-white dark:bg-neutral-900 shadow-lg p-4">
+        <div class="flex items-start gap-3">
+          <div class="mt-0.5 rounded-lg bg-primary-100 dark:bg-primary-900/50 p-2">
+            <UIcon name="i-lucide-bell-ring" class="size-5 text-primary-700 dark:text-primary-200" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p id="appointment-reminder-title" class="text-sm font-semibold">Terminerinnerung</p>
+            <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+              Dein Termin beginnt in {{ minutesLeft }} Minuten.
+            </p>
+            <p class="mt-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">
+              {{ reminder.title }}
+            </p>
+            <p class="mt-0.5 text-xs text-neutral-500">
+              {{ when }}
+              <span v-if="reminder.teacherName"> · {{ teacherLabel }}: {{ reminder.teacherName }}</span>
+            </p>
+            <div class="mt-3 flex justify-end gap-2">
+              <UButton size="xs" variant="ghost" color="neutral" @click="dismiss">Später</UButton>
+              <UButton size="xs" color="primary" icon="i-lucide-calendar-days" @click="openAppointment">
+                Ansehen
+              </UButton>
+            </div>
+          </div>
         </div>
-      </template>
-      <template #body>
-        <p class="text-sm text-neutral-600 dark:text-neutral-400">
-          Dein Termin beginnt in {{ minutesLeft }} Minuten.
-        </p>
-        <p class="mt-3 text-lg font-semibold">{{ reminder.title }}</p>
-        <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          {{ when }}
-          <span v-if="reminder.teacherName"> · {{ teacherLabel }}: {{ reminder.teacherName }}</span>
-        </p>
-      </template>
-      <template #footer>
-        <div class="flex justify-end gap-2 w-full">
-          <UButton variant="ghost" color="neutral" @click="dismiss">Später</UButton>
-          <UButton color="primary" icon="i-lucide-calendar-days" @click="openAppointment">
-            Ansehen
-          </UButton>
-        </div>
-      </template>
-    </template>
-  </UModal>
+      </div>
+    </div>
+  </Teleport>
 </template>
