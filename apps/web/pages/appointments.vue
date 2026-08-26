@@ -748,14 +748,16 @@ watch(
       </div>
 
       <div v-else class="space-y-1">
-        <div class="hidden md:grid grid-cols-7 gap-1 px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-          <div v-for="header in weekdayHeaders" :key="header" class="px-2 py-1">{{ header }}</div>
+        <div class="grid grid-cols-7 gap-px sm:gap-1 text-[10px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400">
+          <div v-for="header in weekdayHeaders" :key="header" class="px-0.5 sm:px-2 py-1 text-center sm:text-left">
+            {{ header }}
+          </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-7 gap-1">
+        <div class="grid grid-cols-7 gap-px sm:gap-1">
           <div
             v-for="day in monthGrid"
             :key="day.key"
-            class="rounded-md border min-h-[110px] p-1.5 flex flex-col gap-1 transition"
+            class="rounded-md border min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1.5 flex flex-col gap-0.5 sm:gap-1 transition overflow-hidden"
             :class="[
               day.inMonth
                 ? 'bg-white dark:bg-neutral-950'
@@ -765,8 +767,7 @@ watch(
                 : 'border-neutral-200 dark:border-neutral-800',
             ]"
           >
-            <div class="flex items-center justify-between text-xs">
-              <span class="md:hidden text-neutral-500">{{ weekdayHeaders[(day.date.getDay() + 6) % 7] }}</span>
+            <div class="flex items-center justify-center sm:justify-end text-[11px] sm:text-xs">
               <span
                 class="font-medium tabular-nums"
                 :class="isToday(day.date) ? 'text-primary-700 dark:text-primary-200' : ''"
@@ -774,12 +775,12 @@ watch(
                 {{ day.date.getDate() }}
               </span>
             </div>
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-0.5 sm:gap-1 min-w-0">
               <button
                 v-for="appointment in appointmentsByDay(day.key).slice(0, 3)"
                 :key="appointment.id"
                 type="button"
-                class="rounded px-1.5 py-0.5 text-[11px] leading-tight border truncate text-left"
+                class="rounded px-0.5 sm:px-1.5 py-0.5 text-[9px] sm:text-[11px] leading-tight border truncate text-left"
                 :class="{
                   'bg-primary-50 dark:bg-primary-900/30 border-primary-200 dark:border-primary-800 text-primary-900 dark:text-primary-100':
                     appointment.status === 'confirmed',
@@ -794,12 +795,12 @@ watch(
                 @click="openEditAppointment(appointment)"
               >
                 <span class="font-medium tabular-nums">{{ formatTime(appointment.startsAt) }}</span>
-                <span class="ml-1">{{ appointmentTitle(appointment) }}</span>
+                <span class="ml-0.5 hidden sm:inline">{{ appointmentTitle(appointment) }}</span>
               </button>
               <button
                 v-if="appointmentsByDay(day.key).length > 3"
                 type="button"
-                class="text-[11px] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-200 text-left"
+                class="text-[9px] sm:text-[11px] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-200 text-left truncate"
                 @click="
                   () => {
                     weekStart = getMondayOf(day.date);
@@ -807,7 +808,7 @@ watch(
                   }
                 "
               >
-                + {{ appointmentsByDay(day.key).length - 3 }} weitere
+                +{{ appointmentsByDay(day.key).length - 3 }}
               </button>
             </div>
           </div>
