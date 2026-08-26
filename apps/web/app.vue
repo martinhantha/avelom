@@ -8,5 +8,6 @@
       <NuxtPage />
     </NuxtLayout>
     <AppointmentCreatedAlert />
+    <AppointmentReminderAlert />
   </UApp>
 </template>
