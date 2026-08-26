@@ -7,6 +7,7 @@ export function isNativeAndroidSpeech() {
 
 export async function startNativeSpeech(handlers: {
   onTranscript: (transcript: string, isFinal: boolean) => void;
+  onSessionEnd?: () => void;
   onError: (message: string) => void;
 }): Promise<() => Promise<void>> {
   const handles: PluginListenerHandle[] = [
@@ -14,6 +15,9 @@ export async function startNativeSpeech(handlers: {
       const transcript = (event.transcript ?? "").replace(/\s+/g, " ").trim();
       if (!transcript) return;
       handlers.onTranscript(transcript, Boolean(event.isFinal));
+    }),
+    await AvelomDevice.addListener("speechSessionEnd", () => {
+      handlers.onSessionEnd?.();
     }),
     await AvelomDevice.addListener("speechError", (event) => {
       handlers.onError(event.message || "Spracherkennung fehlgeschlagen.");

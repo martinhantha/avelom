@@ -51,10 +51,12 @@ public class AvelomDevicePlugin extends Plugin {
     private static final String ACCOUNT_TYPE = "at.avelom.app";
     private static final String GOOGLE_ACCOUNT_PREFIX = "com.google";
     private static final String NOTIFICATION_CHANNEL_ID = "avelom_appointments";
-    private static final long SPEECH_RESTART_DELAY_MS = 350L;
+    private static final long SPEECH_RESTART_DELAY_MS = 650L;
 
     private SpeechRecognizer speechRecognizer;
     private boolean speechListening;
+    private int speechGeneration;
+    private String lastPartial = "";
     private String speechLanguage = "de-DE";
     private final Handler speechHandler = new Handler(Looper.getMainLooper());
 
@@ -416,7 +418,6 @@ public class AvelomDevicePlugin extends Plugin {
                     return;
                 }
                 speechListening = true;
-                ensureSpeechRecognizer();
                 startSpeechListening();
                 call.resolve();
             } catch (Exception exception) {
@@ -440,35 +441,26 @@ public class AvelomDevicePlugin extends Plugin {
         super.handleOnDestroy();
     }
 
-    private void ensureSpeechRecognizer() {
-        if (speechRecognizer != null) {
-            return;
-        }
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
-        speechRecognizer.setRecognitionListener(createSpeechListener());
-    }
-
     private void startSpeechListening() {
         if (!speechListening) {
             return;
         }
-        ensureSpeechRecognizer();
+        speechGeneration += 1;
+        final int generation = speechGeneration;
+        lastPartial = "";
+        destroyRecognizerQuietly();
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
+        speechRecognizer.setRecognitionListener(createSpeechListener(generation));
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, speechLanguage);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, speechLanguage);
-        intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true);
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
         intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getContext().getPackageName());
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2200);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1200);
-        try {
-            intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false);
-        } catch (Exception ignored) {
-            // Optional extra.
-        }
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2800);
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000);
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 800);
         speechRecognizer.startListening(intent);
     }
 
@@ -483,12 +475,18 @@ public class AvelomDevicePlugin extends Plugin {
 
     private void stopSpeechInternal() {
         speechListening = false;
+        speechGeneration += 1;
         speechHandler.removeCallbacksAndMessages(null);
+        lastPartial = "";
+        destroyRecognizerQuietly();
+    }
+
+    private void destroyRecognizerQuietly() {
         if (speechRecognizer == null) {
             return;
         }
         try {
-            speechRecognizer.stopListening();
+            speechRecognizer.setRecognitionListener(null);
         } catch (Exception ignored) {
             // ignore
         }
@@ -505,37 +503,37 @@ public class AvelomDevicePlugin extends Plugin {
         speechRecognizer = null;
     }
 
-    private void emitTranscript(Bundle results, boolean isFinal) {
-        if (results == null) {
+    private void emitTranscript(String transcript, boolean isFinal) {
+        if (transcript == null) {
             return;
         }
-        ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-        if (matches == null || matches.isEmpty()) {
-            return;
-        }
-        String transcript = bestTranscript(matches);
-        if (transcript.isEmpty()) {
+        String trimmed = transcript.trim();
+        if (trimmed.isEmpty()) {
             return;
         }
         JSObject payload = new JSObject();
-        payload.put("transcript", transcript);
+        payload.put("transcript", trimmed);
         payload.put("isFinal", isFinal);
         notifyListeners("speechTranscript", payload);
     }
 
-    private static String bestTranscript(ArrayList<String> matches) {
-        String best = matches.get(0) == null ? "" : matches.get(0).trim();
-        for (int i = 1; i < Math.min(matches.size(), 3); i += 1) {
-            String candidate = matches.get(i) == null ? "" : matches.get(i).trim();
-            if (candidate.length() > best.length() + 4) {
-                best = candidate;
-            }
-        }
-        return best;
+    private void emitSessionEnd() {
+        notifyListeners("speechSessionEnd", new JSObject());
     }
 
-    private RecognitionListener createSpeechListener() {
+    private static String bestTranscript(ArrayList<String> matches) {
+        if (matches == null || matches.isEmpty() || matches.get(0) == null) {
+            return "";
+        }
+        return matches.get(0).trim();
+    }
+
+    private RecognitionListener createSpeechListener(int generation) {
         return new RecognitionListener() {
+            private boolean alive() {
+                return speechListening && generation == speechGeneration;
+            }
+
             @Override
             public void onReadyForSpeech(Bundle params) {}
 
@@ -553,19 +551,24 @@ public class AvelomDevicePlugin extends Plugin {
 
             @Override
             public void onError(int error) {
-                if (!speechListening) {
+                if (!alive()) {
                     return;
                 }
-                if (error == SpeechRecognizer.ERROR_NO_MATCH
+                if (!lastPartial.isEmpty()) {
+                    emitTranscript(lastPartial, true);
+                    lastPartial = "";
+                }
+                emitSessionEnd();
+                boolean recoverable =
+                    error == SpeechRecognizer.ERROR_NO_MATCH
                         || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
                         || error == SpeechRecognizer.ERROR_CLIENT
-                        || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
-                    scheduleSpeechRestart();
-                    return;
+                        || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY;
+                if (!recoverable) {
+                    JSObject payload = new JSObject();
+                    payload.put("message", speechErrorMessage(error));
+                    notifyListeners("speechError", payload);
                 }
-                JSObject payload = new JSObject();
-                payload.put("message", speechErrorMessage(error));
-                notifyListeners("speechError", payload);
                 if (error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                     scheduleSpeechRestart();
                 }
@@ -573,7 +576,15 @@ public class AvelomDevicePlugin extends Plugin {
 
             @Override
             public void onResults(Bundle results) {
-                emitTranscript(results, true);
+                if (!alive()) {
+                    return;
+                }
+                ArrayList<String> matches =
+                    results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                String transcript = bestTranscript(matches);
+                lastPartial = "";
+                emitTranscript(transcript, true);
+                emitSessionEnd();
                 if (speechListening) {
                     scheduleSpeechRestart();
                 }
@@ -581,7 +592,19 @@ public class AvelomDevicePlugin extends Plugin {
 
             @Override
             public void onPartialResults(Bundle partialResults) {
-                emitTranscript(partialResults, false);
+                if (!alive()) {
+                    return;
+                }
+                ArrayList<String> matches =
+                    partialResults == null
+                        ? null
+                        : partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                String transcript = bestTranscript(matches);
+                if (transcript.isEmpty()) {
+                    return;
+                }
+                lastPartial = transcript;
+                emitTranscript(transcript, false);
             }
 
             @Override

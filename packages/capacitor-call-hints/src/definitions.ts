@@ -37,6 +37,7 @@ export interface AvelomDevicePlugin {
     eventName: "speechError",
     listenerFunc: (event: { message: string }) => void,
   ): Promise<PluginListenerHandle>;
+  addListener(eventName: "speechSessionEnd", listenerFunc: () => void): Promise<PluginListenerHandle>;
   saveLocalContact(options: {
     displayName: string;
     phone?: string;

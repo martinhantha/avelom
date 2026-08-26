@@ -7,7 +7,7 @@ import { useAuth } from "../composables/useAuth";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
 import { resolveAppointmentPhone } from "../utils/appointment-contact";
-import { spokenFromRecognition } from "../utils/speech-transcript";
+import { commitUtterance, withLiveInterim } from "../utils/speech-transcript";
 import { isNativeAndroidSpeech, startNativeSpeech } from "../utils/native-speech";
 
 type WebSpeechRecognitionEventResult = {
@@ -141,28 +141,25 @@ function clearSpeechRestart() {
 }
 
 function collectSpoken(event: WebSpeechRecognitionEvent): { finalText: string; interimText: string } {
-  const finals: string[] = [];
+  let finalText = "";
   let interimText = "";
   for (let i = 0; i < event.results.length; i += 1) {
     const result = event.results[i];
     const transcript = (result[0]?.transcript ?? "").replace(/\s+/g, " ").trim();
     if (!transcript) continue;
-    if (result.isFinal) finals.push(transcript);
+    if (result.isFinal) finalText = commitUtterance(finalText, transcript);
     else interimText = transcript;
   }
-  return {
-    finalText: spokenFromRecognition(finals, ""),
-    interimText,
-  };
+  return { finalText, interimText };
 }
 
-function applySpoken(finalText: string, interimText: string) {
-  const spoken = spokenFromRecognition(finalText ? [finalText] : [], interimText);
-  const combined = spokenFromRecognition(speechTextBase ? [speechTextBase] : [], spoken);
+function applySpoken(finalText: string, interimText: string, allowStop = true) {
+  const committed = commitUtterance(speechTextBase, finalText);
+  const combined = withLiveInterim(committed, interimText);
   const { cleaned, stop } = stripStopCommand(combined);
   text.value = cleaned;
   speechInterim.value = interimText;
-  if (!stop) return;
+  if (!stop || !allowStop) return;
   speechTextBase = cleaned;
   speechInterim.value = "";
   stopListeningWithParse();
@@ -232,7 +229,7 @@ function setupSpeech() {
   recognition.onresult = (event) => {
     if (speechStopping) return;
     const { finalText, interimText } = collectSpoken(event);
-    applySpoken(finalText, interimText);
+    applySpoken(finalText, interimText, Boolean(finalText));
   };
   recognition.onerror = (event) => {
     if (event.error === "aborted" || event.error === "no-speech") return;
@@ -303,11 +300,16 @@ async function toggleSpeech() {
         onTranscript: (transcript, isFinal) => {
           if (speechStopping) return;
           if (isFinal) {
-            applySpoken(transcript, "");
+            applySpoken(transcript, "", true);
             if (speechListening.value) speechTextBase = text.value.trim();
             return;
           }
-          applySpoken("", transcript);
+          applySpoken("", transcript, false);
+        },
+        onSessionEnd: () => {
+          if (speechStopping) return;
+          speechTextBase = text.value.trim();
+          speechInterim.value = "";
         },
         onError: (message) => {
           speechError.value = message;

@@ -2,57 +2,81 @@ function normalizeSpeech(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function isRefinement(previous: string, incoming: string): boolean {
-  const a = previous.toLowerCase();
+function isLastWordCorrection(last: string, incoming: string): boolean {
+  const a = last.toLowerCase();
   const b = incoming.toLowerCase();
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (b.startsWith(a) || a.startsWith(b)) return true;
-  return a.length >= 2 && b.length >= 2 && a.slice(0, 2) === b.slice(0, 2);
+  if (!a || !b || a === b) return a === b;
+  if (b.startsWith(a) && b.length > a.length && a.length >= 3) return true;
+  if (a.startsWith(b) && a.length - b.length <= 2 && b.length >= 3) return true;
+  return false;
+}
+
+function tailHeadOverlap(left: string[], right: string[]): number {
+  const max = Math.min(left.length, right.length, 4);
+  for (let count = max; count >= 1; count -= 1) {
+    const tail = left.slice(-count).join(" ").toLowerCase();
+    const head = right.slice(0, count).join(" ").toLowerCase();
+    if (tail === head) return count;
+  }
+  return 0;
 }
 
 /**
- * Fold engine snapshots into one phrase: keep extensions, replace last-word
- * corrections ("lo" → "Louis"), append only truly new utterances.
+ * Merge a finished utterance into committed dictation. Never shrinks the base,
+ * never replaces it with a later snapshot.
  */
-export function foldSpeechParts(parts: string[]): string {
-  let committed = "";
-  for (const raw of parts) {
-    const incoming = normalizeSpeech(raw);
-    if (!incoming) continue;
-    if (!committed) {
-      committed = incoming;
-      continue;
-    }
-    const committedLc = committed.toLowerCase();
-    const incomingLc = incoming.toLowerCase();
-    if (incomingLc === committedLc) continue;
-    if (incomingLc.startsWith(committedLc) || incomingLc.includes(` ${committedLc}`) || incomingLc.endsWith(committedLc)) {
-      committed = incoming;
-      continue;
-    }
-    if (committedLc.startsWith(incomingLc) || committedLc.includes(` ${incomingLc}`) || committedLc.endsWith(incomingLc)) {
-      continue;
-    }
+export function commitUtterance(base: string, utterance: string): string {
+  const committed = normalizeSpeech(base);
+  const incoming = normalizeSpeech(utterance);
+  if (!incoming) return committed;
+  if (!committed) return incoming;
 
-    const words = committed.split(" ");
-    const lastWord = words[words.length - 1] ?? "";
-    const firstIncoming = incoming.split(" ")[0] ?? "";
-    if (incoming.split(" ").length === 1 && isRefinement(lastWord, incoming)) {
-      words[words.length - 1] = incoming;
-      committed = words.join(" ");
-      continue;
-    }
-    if (isRefinement(lastWord, firstIncoming)) {
-      words[words.length - 1] = incoming;
-      committed = words.join(" ");
-      continue;
-    }
-    committed = `${committed} ${incoming}`;
+  const committedLc = committed.toLowerCase();
+  const incomingLc = incoming.toLowerCase();
+  if (incomingLc === committedLc) return committed;
+  if (incomingLc.startsWith(`${committedLc} `)) return incoming;
+  if (committedLc.endsWith(` ${incomingLc}`) || committedLc.startsWith(`${incomingLc} `)) return committed;
+  if (committedLc.includes(` ${incomingLc} `)) return committed;
+
+  const committedWords = committed.split(" ");
+  const incomingWords = incoming.split(" ");
+  const lastWord = committedWords[committedWords.length - 1] ?? "";
+  if (incomingWords.length === 1 && isLastWordCorrection(lastWord, incoming)) {
+    committedWords[committedWords.length - 1] = incoming;
+    return committedWords.join(" ");
   }
-  return committed;
+
+  const overlap = tailHeadOverlap(committedWords, incomingWords);
+  if (overlap > 0) {
+    return [...committedWords, ...incomingWords.slice(overlap)].join(" ");
+  }
+  return `${committed} ${incoming}`;
+}
+
+/** Show live words on top of committed text without wiping the base. */
+export function withLiveInterim(base: string, interim: string): string {
+  const committed = normalizeSpeech(base);
+  const live = normalizeSpeech(interim);
+  if (!live) return committed;
+  if (!committed) return live;
+
+  const committedLc = committed.toLowerCase();
+  const liveLc = live.toLowerCase();
+  if (liveLc === committedLc) return committed;
+  if (liveLc.startsWith(`${committedLc} `)) return live;
+  if (committedLc.endsWith(` ${liveLc}`) || committedLc.startsWith(`${liveLc} `)) return committed;
+  if (committedLc.includes(` ${liveLc} `)) return committed;
+
+  const committedWords = committed.split(" ");
+  const liveWords = live.split(" ");
+  const overlap = tailHeadOverlap(committedWords, liveWords);
+  if (overlap > 0) {
+    return [...committedWords, ...liveWords.slice(overlap)].join(" ");
+  }
+  return `${committed} ${live}`;
 }
 
 export function spokenFromRecognition(finals: string[], lastInterim: string): string {
-  return foldSpeechParts([...finals, lastInterim]);
+  const committed = finals.reduce((text, part) => commitUtterance(text, part), "");
+  return withLiveInterim(committed, lastInterim);
 }
