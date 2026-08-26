@@ -51,7 +51,8 @@ public class AvelomDevicePlugin extends Plugin {
     private static final String ACCOUNT_TYPE = "at.avelom.app";
     private static final String GOOGLE_ACCOUNT_PREFIX = "com.google";
     private static final String NOTIFICATION_CHANNEL_ID = "avelom_appointments";
-    private static final long SPEECH_RESTART_DELAY_MS = 650L;
+    private static final long SPEECH_RESTART_DELAY_MS = 120L;
+    private static final long SPEECH_RECREATE_DELAY_MS = 220L;
 
     private SpeechRecognizer speechRecognizer;
     private boolean speechListening;
@@ -459,25 +460,31 @@ public class AvelomDevicePlugin extends Plugin {
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, speechLanguage);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, speechLanguage);
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
         intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getContext().getPackageName());
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2800);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000);
-        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 800);
         try {
             speechRecognizer.startListening(intent);
         } catch (Exception exception) {
-            scheduleSpeechRestart();
+            scheduleSpeechRestart(true);
         }
     }
 
     private void scheduleSpeechRestart() {
+        scheduleSpeechRestart(false);
+    }
+
+    private void scheduleSpeechRestart(boolean recreate) {
         speechHandler.removeCallbacksAndMessages(null);
+        long delay = recreate ? SPEECH_RECREATE_DELAY_MS : SPEECH_RESTART_DELAY_MS;
         speechHandler.postDelayed(() -> {
-            if (speechListening) {
-                startSpeechListening();
+            if (!speechListening) {
+                return;
             }
-        }, SPEECH_RESTART_DELAY_MS);
+            if (recreate) {
+                destroyRecognizerQuietly();
+            }
+            startSpeechListening();
+        }, delay);
     }
 
     private void stopSpeechInternal() {
@@ -567,17 +574,19 @@ public class AvelomDevicePlugin extends Plugin {
                 }
                 emitSessionEnd();
                 boolean permissionDenied = error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS;
-                boolean recoverable =
-                    error == SpeechRecognizer.ERROR_NO_MATCH
-                        || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
-                        || error == SpeechRecognizer.ERROR_CLIENT
+                boolean staleService =
+                    error == SpeechRecognizer.ERROR_CLIENT
                         || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
                         || error == SpeechRecognizer.ERROR_SERVER
                         || error == SpeechRecognizer.ERROR_NETWORK
                         || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT;
                 if (error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED) {
-                    recoverable = true;
+                    staleService = true;
                 }
+                boolean recoverable =
+                    staleService
+                        || error == SpeechRecognizer.ERROR_NO_MATCH
+                        || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT;
                 if (permissionDenied) {
                     JSObject payload = new JSObject();
                     payload.put("message", speechErrorMessage(error));
@@ -594,7 +603,7 @@ public class AvelomDevicePlugin extends Plugin {
                         notifyListeners("speechError", payload);
                     }
                 }
-                scheduleSpeechRestart();
+                scheduleSpeechRestart(staleService);
             }
 
             @Override
