@@ -25,6 +25,7 @@ export interface AvelomDevicePlugin {
   requestAllPermissions(): Promise<AvelomDevicePermissionStatus>;
   requestMicrophone(): Promise<AvelomDevicePermissionStatus>;
   openAppSettings(): Promise<void>;
+  openWhatsApp(options: { phone: string; app?: "whatsapp" | "business" }): Promise<void>;
   showLocalNotification(options: { title: string; body: string; id?: string }): Promise<void>;
   startSpeechRecognition(options?: { lang?: string }): Promise<void>;
   stopSpeechRecognition(): Promise<void>;

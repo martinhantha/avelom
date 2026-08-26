@@ -1,7 +1,7 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:1:1-8:12
-INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:1:1-8:12
+ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:1:1-14:12
+INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:1:1-14:12
 	package
 		INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml
 	xmlns:android
@@ -30,6 +30,14 @@ uses-permission#android.permission.POST_NOTIFICATIONS
 ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:7:5-77
 	android:name
 		ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:7:22-74
+queries
+ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:9:5-13:15
+intent#action:name:android.speech.RecognitionService
+ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:10:9-12:18
+action#android.speech.RecognitionService
+ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:11:13-72
+	android:name
+		ADDED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml:11:21-69
 uses-sdk
 INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /Users/martin.stofner/WSN/avelom/apps/mobile-shell/node_modules/@avelom/capacitor-call-hints/android/src/main/AndroidManifest.xml

@@ -42,6 +42,10 @@ export class AvelomDeviceWeb extends WebPlugin implements AvelomDevicePlugin {
     // Browser: nothing to open.
   }
 
+  async openWhatsApp(): Promise<void> {
+    throw this.unimplemented("openWhatsApp is native-only.");
+  }
+
   async saveLocalContact(): Promise<{ contactId: string }> {
     throw this.unimplemented("saveLocalContact is native-only.");
   }

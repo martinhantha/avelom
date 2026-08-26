@@ -635,8 +635,8 @@ onMounted(() => {
           <div class="space-y-2 pt-2 border-t border-neutral-200 dark:border-neutral-800">
             <p class="font-medium">WhatsApp-App</p>
             <p class="text-xs text-neutral-500">
-              Welche App beim Tippen auf WhatsApp geöffnet wird. Nützlich, wenn WhatsApp und WhatsApp Business
-              installiert sind.
+              Welche App beim Tippen auf WhatsApp geöffnet wird. WhatsApp Business wird in der Android-App direkt
+              gestartet und muss installiert sein.
             </p>
             <select
               class="w-full max-w-md rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"

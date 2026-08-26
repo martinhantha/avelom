@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Capacitor } from "@capacitor/core";
+import { AvelomDevice } from "@avelom/capacitor-call-hints";
 import { computed, ref } from "vue";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import { useWhatsAppPreference } from "../composables/useWhatsAppPreference";
@@ -41,11 +43,19 @@ const contactSaveState = ref<"idle" | "saved" | "error">("idle");
 
 const phone = computed(() => resolveAppointmentPhone(props.appointment));
 const telHref = computed(() => (phone.value ? toTelHref(phone.value) : null));
-const whatsappHref = computed(() =>
-  phone.value ? toWhatsAppHref(phone.value, { app: whatsappApp.value, platform: device.value.platform }) : null,
-);
+const whatsappHref = computed(() => (phone.value ? toWhatsAppHref(phone.value) : null));
 const whatsappLabel = computed(() => whatsappAppLabel(whatsappApp.value));
-const whatsappIsHttp = computed(() => Boolean(whatsappHref.value?.startsWith("https://")));
+
+async function onWhatsAppClick(event: Event) {
+  if (whatsappApp.value !== "business" || !Capacitor.isNativePlatform()) return;
+  event.preventDefault();
+  if (!phone.value) return;
+  try {
+    await AvelomDevice.openWhatsApp({ phone: phone.value, app: "business" });
+  } catch {
+    // WhatsApp Business missing or native plugin not yet rebuilt.
+  }
+}
 
 const canSaveContact = computed(() => device.value.features.saveContact && Boolean(phone.value));
 const canComplete = computed(
@@ -104,8 +114,8 @@ async function saveDeviceContact() {
     <UButton
       v-if="whatsappHref"
       :href="whatsappHref"
-      :target="whatsappIsHttp ? '_blank' : undefined"
-      :rel="whatsappIsHttp ? 'noopener noreferrer' : undefined"
+      target="_blank"
+      rel="noopener noreferrer"
       :size="compact ? 'xs' : 'sm'"
       color="success"
       variant="soft"
@@ -113,6 +123,7 @@ async function saveDeviceContact() {
       :square="compact"
       :aria-label="`${whatsappLabel} öffnen`"
       :title="whatsappLabel"
+      @click="onWhatsAppClick"
     >
       <span v-if="!compact" class="hidden sm:inline">{{ whatsappLabel }}</span>
     </UButton>

@@ -1,5 +1,3 @@
-import type { DevicePlatform } from "@avelom/device-capabilities";
-
 export type WhatsAppApp = "whatsapp" | "business";
 
 export const WHATSAPP_APP_STORAGE_KEY = "avelom.device.whatsappApp";
@@ -18,10 +16,7 @@ export function whatsappAppLabel(app: WhatsAppApp): string {
   return app === "business" ? "WhatsApp Business" : "WhatsApp";
 }
 
-export function toWhatsAppHref(
-  phone: string,
-  options?: { app?: WhatsAppApp; platform?: DevicePlatform },
-): string {
+export function toWhatsAppHref(phone: string): string {
   let digits = phone.trim();
   if (digits.startsWith("00")) {
     digits = digits.slice(2);
@@ -32,13 +27,5 @@ export function toWhatsAppHref(
   if (digits.startsWith("0")) {
     digits = `43${digits.slice(1)}`;
   }
-
-  const app = options?.app ?? "whatsapp";
-  const platform = options?.platform ?? "web";
-
-  if (app === "business" && (platform === "android" || platform === "ios")) {
-    return `whatsapp-business://send?phone=${digits}`;
-  }
-
   return `https://wa.me/${digits}`;
 }

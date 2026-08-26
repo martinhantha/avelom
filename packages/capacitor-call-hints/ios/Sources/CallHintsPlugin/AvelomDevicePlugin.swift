@@ -13,6 +13,7 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "requestAllPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestMicrophone", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openAppSettings", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openWhatsApp", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveLocalContact", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "showLocalNotification", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startSpeechRecognition", returnType: CAPPluginReturnPromise),
@@ -52,6 +53,47 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
             }
             call.resolve()
         }
+    }
+
+    @objc func openWhatsApp(_ call: CAPPluginCall) {
+        let phone = call.getString("phone") ?? ""
+        let app = call.getString("app") ?? "whatsapp"
+        let digits = Self.normalizeWhatsAppDigits(phone)
+        if digits.isEmpty {
+            call.reject("Keine Telefonnummer")
+            return
+        }
+        let scheme = app == "business"
+            ? "whatsapp-business://send?phone=\(digits)"
+            : "whatsapp://send?phone=\(digits)"
+        DispatchQueue.main.async {
+            guard let url = URL(string: scheme) else {
+                call.reject("Ungültige WhatsApp-Adresse")
+                return
+            }
+            UIApplication.shared.open(url, options: [:]) { success in
+                if success {
+                    call.resolve()
+                } else {
+                    let label = app == "business" ? "WhatsApp Business" : "WhatsApp"
+                    call.reject("\(label) ist nicht installiert")
+                }
+            }
+        }
+    }
+
+    private static func normalizeWhatsAppDigits(_ phone: String) -> String {
+        var digits = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        if digits.hasPrefix("00") {
+            digits = String(digits.dropFirst(2))
+        } else if digits.hasPrefix("+") {
+            digits = String(digits.dropFirst())
+        }
+        digits = digits.filter { $0.isNumber }
+        if digits.hasPrefix("0"), digits.count > 1 {
+            digits = "43" + digits.dropFirst()
+        }
+        return digits
     }
 
     @objc func saveLocalContact(_ call: CAPPluginCall) {
