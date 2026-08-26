@@ -14,14 +14,18 @@ export interface CallHintsPlugin {
 export interface AvelomDevicePermissionStatus {
   microphone: PermissionState;
   contacts: PermissionState;
+  notifications?: PermissionState;
 }
 
 export interface AvelomDevicePlugin {
   checkPermissions(): Promise<AvelomDevicePermissionStatus>;
-  requestPermissions(options?: { alias?: "microphone" | "contacts" }): Promise<AvelomDevicePermissionStatus>;
+  requestPermissions(options?: {
+    alias?: "microphone" | "contacts" | "notifications";
+  }): Promise<AvelomDevicePermissionStatus>;
   requestAllPermissions(): Promise<AvelomDevicePermissionStatus>;
   requestMicrophone(): Promise<AvelomDevicePermissionStatus>;
   openAppSettings(): Promise<void>;
+  showLocalNotification(options: { title: string; body: string; id?: string }): Promise<void>;
   saveLocalContact(options: {
     displayName: string;
     phone?: string;

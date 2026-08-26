@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
+import { useWhatsAppPreference } from "../composables/useWhatsAppPreference";
 import {
   resolveAppointmentDisplayName,
   resolveAppointmentPhone,
   toTelHref,
-  toWhatsAppHref,
   type AppointmentContactSource,
 } from "../utils/appointment-contact";
+import { openWhatsAppUrl, toWhatsAppHref, whatsappAppLabel } from "../utils/whatsapp";
 
 const props = withDefaults(
   defineProps<{
@@ -34,12 +35,23 @@ const emit = defineEmits<{
 }>();
 
 const { device } = useDeviceCapabilities();
+const { whatsappApp } = useWhatsAppPreference();
 const savingContact = ref(false);
 const contactSaveState = ref<"idle" | "saved" | "error">("idle");
 
 const phone = computed(() => resolveAppointmentPhone(props.appointment));
 const telHref = computed(() => (phone.value ? toTelHref(phone.value) : null));
-const whatsappHref = computed(() => (phone.value ? toWhatsAppHref(phone.value) : null));
+const whatsappHref = computed(() =>
+  phone.value ? toWhatsAppHref(phone.value, { app: whatsappApp.value, platform: device.value.platform }) : null,
+);
+const whatsappLabel = computed(() => whatsappAppLabel(whatsappApp.value));
+
+function openWhatsApp(event: Event) {
+  if (!whatsappHref.value) return;
+  event.preventDefault();
+  openWhatsAppUrl(whatsappHref.value);
+}
+
 const canSaveContact = computed(() => device.value.features.saveContact && Boolean(phone.value));
 const canComplete = computed(
   () =>
@@ -97,17 +109,16 @@ async function saveDeviceContact() {
     <UButton
       v-if="whatsappHref"
       :href="whatsappHref"
-      target="_blank"
-      rel="noopener noreferrer"
       :size="compact ? 'xs' : 'sm'"
       color="success"
       variant="soft"
       icon="i-lucide-message-circle"
       :square="compact"
-      aria-label="WhatsApp öffnen"
-      title="WhatsApp"
+      :aria-label="`${whatsappLabel} öffnen`"
+      :title="whatsappLabel"
+      @click="openWhatsApp"
     >
-      <span v-if="!compact" class="hidden sm:inline">WhatsApp</span>
+      <span v-if="!compact" class="hidden sm:inline">{{ whatsappLabel }}</span>
     </UButton>
     <UButton
       v-if="canSaveContact"

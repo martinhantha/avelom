@@ -45,4 +45,8 @@ export class AvelomDeviceWeb extends WebPlugin implements AvelomDevicePlugin {
   async saveLocalContact(): Promise<{ contactId: string }> {
     throw this.unimplemented("saveLocalContact is native-only.");
   }
+
+  async showLocalNotification(): Promise<void> {
+    // Browser notifications are handled by the Notification API.
+  }
 }

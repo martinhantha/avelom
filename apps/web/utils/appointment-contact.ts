@@ -40,17 +40,3 @@ export function resolveAppointmentPhone(appointment: AppointmentContactSource): 
 export function toTelHref(phone: string): string {
   return `tel:${phone.replace(/[^\d+]/g, "")}`;
 }
-
-export function toWhatsAppHref(phone: string): string {
-  let digits = phone.trim();
-  if (digits.startsWith("00")) {
-    digits = digits.slice(2);
-  } else if (digits.startsWith("+")) {
-    digits = digits.slice(1);
-  }
-  digits = digits.replace(/\D/g, "");
-  if (digits.startsWith("0")) {
-    digits = `43${digits.slice(1)}`;
-  }
-  return `https://wa.me/${digits}`;
-}

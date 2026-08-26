@@ -3,11 +3,17 @@ package at.avelom.plugins.callhints;
 import android.Manifest;
 import android.accounts.Account;
 import android.accounts.AccountManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderResult;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.provider.ContactsContract.CommonDataKinds.Note;
@@ -29,7 +35,8 @@ import java.util.ArrayList;
     name = "AvelomDevice",
     permissions = {
         @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS }),
-        @Permission(alias = "contacts", strings = { Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS })
+        @Permission(alias = "contacts", strings = { Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS }),
+        @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
     }
 )
 public class AvelomDevicePlugin extends Plugin {
@@ -37,12 +44,18 @@ public class AvelomDevicePlugin extends Plugin {
     private static final String ACCOUNT_NAME = "Avelom";
     private static final String ACCOUNT_TYPE = "at.avelom.app";
     private static final String GOOGLE_ACCOUNT_PREFIX = "com.google";
+    private static final String NOTIFICATION_CHANNEL_ID = "avelom_appointments";
 
     @PluginMethod
     public void checkPermissions(PluginCall call) {
         JSObject result = new JSObject();
         result.put("microphone", getPermissionState("microphone").toString());
         result.put("contacts", getPermissionState("contacts").toString());
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.put("notifications", PermissionState.GRANTED.toString());
+        } else {
+            result.put("notifications", getPermissionState("notifications").toString());
+        }
         call.resolve(result);
     }
 
@@ -59,6 +72,15 @@ public class AvelomDevicePlugin extends Plugin {
                 return;
             }
             requestPermissionForAlias("contacts", call, "permissionsCallback");
+            return;
+        }
+        if ("notifications".equals(alias)) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                    || getPermissionState("notifications") == PermissionState.GRANTED) {
+                checkPermissions(call);
+                return;
+            }
+            requestPermissionForAlias("notifications", call, "permissionsCallback");
             return;
         }
         if (getPermissionState("microphone") == PermissionState.GRANTED) {
@@ -86,6 +108,77 @@ public class AvelomDevicePlugin extends Plugin {
             return;
         }
         requestPermissionForAlias("microphone", call, "permissionsCallback");
+    }
+
+    @PluginMethod
+    public void showLocalNotification(PluginCall call) {
+        ensureNotificationChannel();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && getPermissionState("notifications") != PermissionState.GRANTED) {
+            call.resolve();
+            return;
+        }
+
+        String title = call.getString("title", "Avelom");
+        String body = call.getString("body", "");
+        String id = call.getString("id");
+        int notificationId = id != null && !id.isEmpty() ? id.hashCode() : (int) System.currentTimeMillis();
+
+        Context context = getContext();
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) {
+            call.resolve();
+            return;
+        }
+
+        int icon = context.getApplicationInfo().icon;
+        if (icon == 0) {
+            icon = android.R.drawable.ic_popup_reminder;
+        }
+
+        Notification.Builder builder;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder = new Notification.Builder(context, NOTIFICATION_CHANNEL_ID);
+        } else {
+            builder = new Notification.Builder(context);
+        }
+
+        Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+        if (launch != null) {
+            launch.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                pendingFlags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            builder.setContentIntent(PendingIntent.getActivity(context, 0, launch, pendingFlags));
+        }
+
+        builder.setSmallIcon(icon)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setCategory(Notification.CATEGORY_EVENT);
+        }
+        manager.notify(notificationId, builder.build());
+        call.resolve();
+    }
+
+    private void ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+        NotificationManager manager = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null || manager.getNotificationChannel(NOTIFICATION_CHANNEL_ID) != null) {
+            return;
+        }
+        NotificationChannel channel = new NotificationChannel(
+            NOTIFICATION_CHANNEL_ID,
+            "Termine",
+            NotificationManager.IMPORTANCE_HIGH
+        );
+        channel.setDescription("Neue Termine in Avelom");
+        manager.createNotificationChannel(channel);
     }
 
     @PluginMethod

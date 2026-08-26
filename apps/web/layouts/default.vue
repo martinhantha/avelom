@@ -14,7 +14,7 @@ const links = computed(() => {
     base.push({ to: "/tenants", label: "Mandanten", icon: "i-lucide-building-2" });
   }
   if (canAccessWorkspace.value) {
-    base.push({ to: "/conflict-demo", label: "Conflicts", icon: "i-lucide-git-merge" });
+    base.push({ to: "/conflicts", label: "Konflikte", icon: "i-lucide-git-merge" });
   }
   return base;
 });

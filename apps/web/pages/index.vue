@@ -281,6 +281,8 @@ onMounted(() => {
   loadAppointments();
 });
 
+useAppointmentListSync(loadAppointments);
+
 watch(quickOpen, (open) => {
   if (!open) {
     editingAppointment.value = null;
@@ -412,13 +414,13 @@ async function deleteAppointment(appointment: AppointmentListItem) {
       </UButton>
       <UButton
         v-if="canAccessWorkspace"
-        to="/conflict-demo"
+        to="/conflicts"
         block
         size="xl"
         variant="outline"
         icon="i-lucide-git-merge"
       >
-        Konflikt / Alternativen
+        Konflikte
       </UButton>
       <UButton size="xl" variant="ghost" color="neutral" icon="i-lucide-refresh-cw" :loading="appointmentsLoading" @click="loadAppointments">
         Termine neu laden

@@ -1385,3 +1385,549 @@ export async function getSchedulingOptions(tenantId: string, query: { q?: string
     businessTimeZone: BUSINESS_TIME_ZONE,
   };
 }
+
+function overlapsRange(leftStart: Date, leftEnd: Date, rightStart: Date, rightEnd: Date) {
+  return leftStart < rightEnd && leftEnd > rightStart;
+}
+
+function clusterOverlapping<T extends { id: string; startsAt: Date; endsAt: Date }>(items: T[]): T[][] {
+  const sorted = [...items].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const clusters: T[][] = [];
+  let current: T[] = [];
+  let clusterEnd = 0;
+  for (const item of sorted) {
+    if (!current.length || item.startsAt.getTime() < clusterEnd) {
+      current.push(item);
+      clusterEnd = Math.max(clusterEnd, item.endsAt.getTime());
+      continue;
+    }
+    if (current.length > 1) clusters.push(current);
+    current = [item];
+    clusterEnd = item.endsAt.getTime();
+  }
+  if (current.length > 1) clusters.push(current);
+  return clusters;
+}
+
+function parseMinutes(time: string) {
+  const [hour, minute] = time.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function formatMinutes(total: number) {
+  const hour = Math.floor(total / 60);
+  const minute = total % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function addDaysToDateString(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  return next.toISOString().slice(0, 10);
+}
+
+function fromBusinessDateTime(date: string, time: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  let millis = Date.UTC(year, month - 1, day, hour, minute);
+  for (let i = 0; i < 4; i += 1) {
+    const parts = getBusinessParts(new Date(millis));
+    const [actualYear, actualMonth, actualDay] = parts.date.split("-").map(Number);
+    const [actualHour, actualMinute] = parts.time.split(":").map(Number);
+    const delta =
+      Date.UTC(year, month - 1, day, hour, minute) -
+      Date.UTC(actualYear, actualMonth - 1, actualDay, actualHour, actualMinute);
+    if (delta === 0) break;
+    millis += delta;
+  }
+  return new Date(millis);
+}
+
+function conflictAppointmentDto(row: Prisma.AppointmentGetPayload<{ select: typeof appointmentSelect }>) {
+  const dto = toAppointmentDto(row);
+  return {
+    id: dto.id,
+    startsAt: dto.startsAt,
+    endsAt: dto.endsAt,
+    status: dto.status,
+    version: dto.version,
+    appointmentContactText: dto.appointmentContactText,
+    teacher: dto.teacher,
+    resource: dto.resource,
+    lessonType: dto.lessonType,
+    customer: dto.customer
+      ? {
+          id: dto.customer.id,
+          displayName: dto.customer.displayName,
+          phones: dto.customer.phones,
+        }
+      : null,
+  };
+}
+
+function defaultRange() {
+  const now = new Date();
+  const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const to = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  return { from, to };
+}
+
+export async function listSchedulingConflicts(
+  tenantId: string,
+  query: { from?: string; to?: string },
+) {
+  const range = defaultRange();
+  const from = query.from ? parseRequiredDate(query.from, "from") : range.from;
+  const to = query.to ? parseRequiredDate(query.to, "to") : range.to;
+  if (to <= from) {
+    throwValidation("Ende muss nach dem Start liegen", { from: from.toISOString(), to: to.toISOString() });
+  }
+
+  const [rows, tenant] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        status: { in: activeAppointmentStatuses },
+        startsAt: { lt: to },
+        endsAt: { gt: from },
+      },
+      select: appointmentSelect,
+      orderBy: { startsAt: "asc" },
+      take: 500,
+    }),
+    prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { teacherLabel: true, resourcesEnabled: true },
+    }),
+  ]);
+
+  const teacherLabel = tenant?.teacherLabel?.trim() || "Lehrer";
+  type AppointmentRow = (typeof rows)[number];
+  const conflicts: {
+    id: string;
+    type: "TIME_OVERLAP" | "RESOURCE_DOUBLE_BOOK";
+    title: string;
+    detail: string;
+    appointments: ReturnType<typeof conflictAppointmentDto>[];
+  }[] = [];
+
+  const byTeacher = new Map<string, AppointmentRow[]>();
+  for (const row of rows) {
+    if (!row.teacherId) continue;
+    const list = byTeacher.get(row.teacherId) ?? [];
+    list.push(row);
+    byTeacher.set(row.teacherId, list);
+  }
+  for (const [teacherId, list] of byTeacher) {
+    for (const cluster of clusterOverlapping(list)) {
+      const teacherName = cluster[0]?.teacher?.displayName || teacherLabel;
+      conflicts.push({
+        id: `teacher:${teacherId}:${cluster.map((item) => item.id).sort().join("_")}`,
+        type: "TIME_OVERLAP",
+        title: `${teacherLabel} doppelt belegt`,
+        detail: `${teacherName} · ${cluster.length} Termine überschneiden sich`,
+        appointments: cluster.map(conflictAppointmentDto),
+      });
+    }
+  }
+
+  if (tenant?.resourcesEnabled !== false) {
+    const byResource = new Map<string, AppointmentRow[]>();
+    for (const row of rows) {
+      if (!row.resourceId) continue;
+      const list = byResource.get(row.resourceId) ?? [];
+      list.push(row);
+      byResource.set(row.resourceId, list);
+    }
+    for (const [resourceId, list] of byResource) {
+      const capacity = list[0]?.resource?.capacity ?? 1;
+      if (capacity <= 1) {
+        for (const cluster of clusterOverlapping(list)) {
+          conflicts.push({
+            id: `resource:${resourceId}:${cluster.map((item) => item.id).sort().join("_")}`,
+            type: "RESOURCE_DOUBLE_BOOK",
+            title: "Ressource doppelt belegt",
+            detail: `${list[0]?.resource?.name || "Ressource"} · ${cluster.length} Termine überschneiden sich`,
+            appointments: cluster.map(conflictAppointmentDto),
+          });
+        }
+        continue;
+      }
+
+      const events = list.flatMap((item) => [
+        { at: item.startsAt.getTime(), delta: 1, item },
+        { at: item.endsAt.getTime(), delta: -1, item },
+      ]);
+      events.sort((a, b) => a.at - b.at || a.delta - b.delta);
+      const active = new Set<string>();
+      const overflowGroups: AppointmentRow[][] = [];
+      let lastKey = "";
+      for (const event of events) {
+        if (event.delta === 1) active.add(event.item.id);
+        else active.delete(event.item.id);
+        if (active.size > capacity) {
+          const group = list.filter((item) => active.has(item.id));
+          const key = group
+            .map((item) => item.id)
+            .sort()
+            .join("_");
+          if (key !== lastKey) {
+            overflowGroups.push(group);
+            lastKey = key;
+          }
+        }
+      }
+      for (const group of overflowGroups) {
+        conflicts.push({
+          id: `resource:${resourceId}:${group.map((item) => item.id).sort().join("_")}`,
+          type: "RESOURCE_DOUBLE_BOOK",
+          title: "Ressource überlastet",
+          detail: `${group[0]?.resource?.name || "Ressource"} · Kapazität ${capacity}, ${group.length} gleichzeitige Termine`,
+          appointments: group.map(conflictAppointmentDto),
+        });
+      }
+    }
+  }
+
+  conflicts.sort(
+    (a, b) => new Date(a.appointments[0]?.startsAt ?? 0).getTime() - new Date(b.appointments[0]?.startsAt ?? 0).getTime(),
+  );
+
+  return {
+    data: conflicts,
+    range: { from: from.toISOString(), to: to.toISOString() },
+    teacherLabel,
+    resourcesEnabled: tenant?.resourcesEnabled ?? true,
+  };
+}
+
+type SlotCheckAppointment = {
+  id: string;
+  startsAt: Date;
+  endsAt: Date;
+  teacherId: string | null;
+  resourceId: string | null;
+};
+
+function teacherBlockedByAvailability(
+  rules: { weekday: number; startTime: string; endTime: string }[],
+  exceptions: { type: AvailabilityExceptionType; startsOn: Date; endsOn: Date }[],
+  startsAt: Date,
+  endsAt: Date,
+) {
+  const start = getBusinessParts(startsAt);
+  const end = getBusinessParts(endsAt);
+  const exceptionForDay = exceptions.filter(
+    (exception) => start.date >= dateOnlyString(exception.startsOn) && start.date <= dateOnlyString(exception.endsOn),
+  );
+  const blocking = exceptionForDay.some(
+    (exception) =>
+      exception.type === AvailabilityExceptionType.vacation ||
+      exception.type === AvailabilityExceptionType.sick ||
+      exception.type === AvailabilityExceptionType.block,
+  );
+  if (blocking) return true;
+  if (!rules.length) return false;
+  const extraOpen = exceptionForDay.some((exception) => exception.type === AvailabilityExceptionType.extra_open);
+  const matchingRule = rules.some(
+    (rule) =>
+      rule.weekday === start.weekday &&
+      start.date === end.date &&
+      compareTimes(start.time, rule.startTime) >= 0 &&
+      compareTimes(end.time, rule.endTime) <= 0,
+  );
+  return !matchingRule && !extraOpen;
+}
+
+function slotIsFree(input: {
+  startsAt: Date;
+  endsAt: Date;
+  teacherId: string | null;
+  resourceId: string | null;
+  excludeAppointmentId: string;
+  nearby: SlotCheckAppointment[];
+  resourceCapacity: Map<string, number>;
+  rulesByTeacher: Map<string, { weekday: number; startTime: string; endTime: string }[]>;
+  exceptionsByTeacher: Map<string, { type: AvailabilityExceptionType; startsOn: Date; endsOn: Date }[]>;
+}) {
+  if (input.startsAt.getTime() <= Date.now()) return false;
+  if (input.teacherId) {
+    if (
+      teacherBlockedByAvailability(
+        input.rulesByTeacher.get(input.teacherId) ?? [],
+        input.exceptionsByTeacher.get(input.teacherId) ?? [],
+        input.startsAt,
+        input.endsAt,
+      )
+    ) {
+      return false;
+    }
+    const teacherBusy = input.nearby.some(
+      (row) =>
+        row.id !== input.excludeAppointmentId &&
+        row.teacherId === input.teacherId &&
+        overlapsRange(input.startsAt, input.endsAt, row.startsAt, row.endsAt),
+    );
+    if (teacherBusy) return false;
+  }
+  if (input.resourceId) {
+    const capacity = input.resourceCapacity.get(input.resourceId) ?? 1;
+    const overlapCount = input.nearby.filter(
+      (row) =>
+        row.id !== input.excludeAppointmentId &&
+        row.resourceId === input.resourceId &&
+        overlapsRange(input.startsAt, input.endsAt, row.startsAt, row.endsAt),
+    ).length;
+    if (overlapCount >= capacity) return false;
+  }
+  return true;
+}
+
+export async function suggestAppointmentAlternatives(
+  tenantId: string,
+  appointmentIdInput: string | undefined,
+) {
+  const appointmentId = normalizeRequiredUuid(appointmentIdInput, "appointmentId");
+  const appointment = await prisma.appointment.findFirst({
+    where: { id: appointmentId, tenantId, deletedAt: null },
+    select: appointmentSelect,
+  });
+  if (!appointment) {
+    throwNotFound("Termin nicht gefunden", { appointmentId });
+  }
+
+  const durationMs = appointment.endsAt.getTime() - appointment.startsAt.getTime();
+  const durationMin = Math.max(15, Math.round(durationMs / 60000));
+  const startParts = getBusinessParts(appointment.startsAt);
+  const searchFrom = fromBusinessDateTime(startParts.date, "00:00");
+  const searchTo = fromBusinessDateTime(addDaysToDateString(startParts.date, 8), "00:00");
+
+  const [teachers, resources, rules, exceptions, nearby, tenant] = await Promise.all([
+    prisma.teacherProfile.findMany({
+      where: { tenantId, deletedAt: null, membership: { deletedAt: null } },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" },
+    }),
+    prisma.resource.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, name: true, capacity: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.availabilityRule.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { teacherId: true, weekday: true, startTime: true, endTime: true },
+    }),
+    prisma.availabilityException.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { teacherId: true, type: true, startsOn: true, endsOn: true },
+    }),
+    prisma.appointment.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        status: { in: activeAppointmentStatuses },
+        startsAt: { lt: searchTo },
+        endsAt: { gt: searchFrom },
+      },
+      select: { id: true, startsAt: true, endsAt: true, teacherId: true, resourceId: true },
+    }),
+    prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { teacherLabel: true, resourcesEnabled: true },
+    }),
+  ]);
+
+  const teacherLabel = tenant?.teacherLabel?.trim() || "Lehrer";
+  const resourcesEnabled = tenant?.resourcesEnabled ?? true;
+  const rulesByTeacher = new Map<string, { weekday: number; startTime: string; endTime: string }[]>();
+  for (const rule of rules) {
+    const list = rulesByTeacher.get(rule.teacherId) ?? [];
+    list.push({ weekday: rule.weekday, startTime: rule.startTime, endTime: rule.endTime });
+    rulesByTeacher.set(rule.teacherId, list);
+  }
+  const exceptionsByTeacher = new Map<
+    string,
+    { type: AvailabilityExceptionType; startsOn: Date; endsOn: Date }[]
+  >();
+  for (const exception of exceptions) {
+    const list = exceptionsByTeacher.get(exception.teacherId) ?? [];
+    list.push({ type: exception.type, startsOn: exception.startsOn, endsOn: exception.endsOn });
+    exceptionsByTeacher.set(exception.teacherId, list);
+  }
+  const resourceCapacity = new Map<string, number>(
+    resources.map((resource) => [resource.id, resource.capacity]),
+  );
+  const checkBase: Omit<Parameters<typeof slotIsFree>[0], "startsAt" | "endsAt" | "teacherId" | "resourceId"> = {
+    excludeAppointmentId: appointment.id,
+    nearby,
+    resourceCapacity,
+    rulesByTeacher,
+    exceptionsByTeacher,
+  };
+
+  const alternatives: {
+    id: string;
+    kind: "time" | "teacher" | "time_and_teacher" | "resource";
+    title: string;
+    detail: string;
+    appointmentId: string;
+    startsAt: string;
+    endsAt: string;
+    teacherId: string | null;
+    resourceId: string | null;
+  }[] = [];
+
+  const pushAlternative = (
+    kind: "time" | "teacher" | "time_and_teacher" | "resource",
+    title: string,
+    detail: string,
+    startsAt: Date,
+    endsAt: Date,
+    teacherId: string | null,
+    resourceId: string | null,
+  ) => {
+    if (alternatives.length >= 6) return;
+    const id = `${kind}:${startsAt.toISOString()}:${teacherId ?? "none"}:${resourceId ?? "none"}`;
+    if (alternatives.some((item) => item.id === id)) return;
+    if (
+      teacherId === appointment.teacherId &&
+      resourceId === appointment.resourceId &&
+      Math.abs(startsAt.getTime() - appointment.startsAt.getTime()) < 60_000
+    ) {
+      return;
+    }
+    alternatives.push({
+      id,
+      kind,
+      title,
+      detail,
+      appointmentId: appointment.id,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      teacherId,
+      resourceId,
+    });
+  };
+
+  if (appointment.teacherId) {
+    for (const teacher of teachers) {
+      if (teacher.id === appointment.teacherId) continue;
+      if (
+        slotIsFree({
+          ...checkBase,
+          startsAt: appointment.startsAt,
+          endsAt: appointment.endsAt,
+          teacherId: teacher.id,
+          resourceId: appointment.resourceId,
+        })
+      ) {
+        pushAlternative(
+          "teacher",
+          `Anderer ${teacherLabel}`,
+          `${teacher.displayName} · gleiche Zeit · verfügbar`,
+          appointment.startsAt,
+          appointment.endsAt,
+          teacher.id,
+          appointment.resourceId,
+        );
+      }
+      if (alternatives.filter((item) => item.kind === "teacher").length >= 2) break;
+    }
+  }
+
+  if (resourcesEnabled && appointment.resourceId) {
+    for (const resource of resources) {
+      if (resource.id === appointment.resourceId) continue;
+      if (
+        slotIsFree({
+          ...checkBase,
+          startsAt: appointment.startsAt,
+          endsAt: appointment.endsAt,
+          teacherId: appointment.teacherId,
+          resourceId: resource.id,
+        })
+      ) {
+        pushAlternative(
+          "resource",
+          "Andere Ressource",
+          `${resource.name} · gleiche Zeit · frei`,
+          appointment.startsAt,
+          appointment.endsAt,
+          appointment.teacherId,
+          resource.id,
+        );
+      }
+      if (alternatives.filter((item) => item.kind === "resource").length >= 2) break;
+    }
+  }
+
+  const scanTeacher = appointment.teacherId
+    ? teachers.filter((teacher) => teacher.id === appointment.teacherId)
+    : teachers.slice(0, 1);
+  const extraTeachers = teachers.filter((teacher) => teacher.id !== appointment.teacherId).slice(0, 3);
+  const scanTeachers = [...scanTeacher, ...extraTeachers];
+
+  for (const teacher of scanTeachers) {
+    for (let dayOffset = 0; dayOffset <= 7; dayOffset += 1) {
+      const date = addDaysToDateString(startParts.date, dayOffset);
+      const weekday = getBusinessParts(fromBusinessDateTime(date, "12:00")).weekday;
+      const teacherRules = rulesByTeacher.get(teacher.id) ?? [];
+      const windows = teacherRules.filter((rule) => rule.weekday === weekday);
+      const ranges = windows.length ? windows : [{ startTime: "08:00", endTime: "18:00" }];
+      for (const range of ranges) {
+        const startMin = parseMinutes(range.startTime);
+        const endMin = parseMinutes(range.endTime);
+        for (let slot = startMin; slot + durationMin <= endMin; slot += 15) {
+          const startsAt = fromBusinessDateTime(date, formatMinutes(slot));
+          const endsAt = new Date(startsAt.getTime() + durationMs);
+          if (
+            !slotIsFree({
+              ...checkBase,
+              startsAt,
+              endsAt,
+              teacherId: teacher.id,
+              resourceId: appointment.resourceId,
+            })
+          ) {
+            continue;
+          }
+          const sameTeacher = teacher.id === appointment.teacherId;
+          const timeLabel = `${formatMinutes(slot)}–${formatMinutes(slot + durationMin)}`;
+          const dayLabel = dayOffset === 0 ? "Heute" : dayOffset === 1 ? "Morgen" : date;
+          if (sameTeacher) {
+            pushAlternative(
+              "time",
+              "Anderes Zeitfenster",
+              `${dayLabel} ${timeLabel} · ${teacher.displayName} frei`,
+              startsAt,
+              endsAt,
+              teacher.id,
+              appointment.resourceId,
+            );
+          } else {
+            pushAlternative(
+              "time_and_teacher",
+              `Zeit & ${teacherLabel}`,
+              `${dayLabel} ${timeLabel} · ${teacher.displayName}`,
+              startsAt,
+              endsAt,
+              teacher.id,
+              appointment.resourceId,
+            );
+          }
+          break;
+        }
+        if (alternatives.length >= 6) break;
+      }
+      if (alternatives.length >= 6) break;
+    }
+    if (alternatives.length >= 6) break;
+  }
+
+  return {
+    appointment: conflictAppointmentDto(appointment),
+    data: alternatives,
+    teacherLabel,
+  };
+}

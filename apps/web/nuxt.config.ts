@@ -14,6 +14,14 @@ export default defineNuxtConfig({
     rollupConfig: {
       external: ["@prisma/client", ".prisma/client"],
     },
+    routeRules: {
+      "/api/v1/tenants/**/events": {
+        headers: {
+          "cache-control": "no-cache, no-transform",
+          "x-accel-buffering": "no",
+        },
+      },
+    },
   },
   vite: {
     optimizeDeps: {

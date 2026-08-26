@@ -53,6 +53,17 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
     return [];
   }
 
+  override async requestPushPermission(): Promise<NotificationPermission | "unsupported"> {
+    if (this.platform === "android") {
+      try {
+        await AvelomDevice.requestPermissions({ alias: "notifications" });
+      } catch {
+        // Continue with the Web Notification prompt if native request fails.
+      }
+    }
+    return super.requestPushPermission();
+  }
+
   override async requestMicrophonePermission(): Promise<boolean> {
     try {
       const status = await AvelomDevice.requestMicrophone();

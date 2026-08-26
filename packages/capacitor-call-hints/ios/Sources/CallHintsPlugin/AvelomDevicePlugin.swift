@@ -13,7 +13,8 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "requestAllPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestMicrophone", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openAppSettings", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "saveLocalContact", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "saveLocalContact", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "showLocalNotification", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func checkPermissions(_ call: CAPPluginCall) {
@@ -90,6 +91,10 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve(result)
             }
         }
+    }
+
+    @objc func showLocalNotification(_ call: CAPPluginCall) {
+        call.resolve()
     }
 
     private func permissionStatus() -> [String: String] {

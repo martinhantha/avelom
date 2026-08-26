@@ -410,6 +410,8 @@ onMounted(async () => {
   await loadAppointments();
 });
 
+useAppointmentListSync(loadAppointments);
+
 watch(
   () => primaryTenant.value?.tenantId,
   async () => {

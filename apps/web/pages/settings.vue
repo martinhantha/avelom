@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
 import { isCallHintsOptIn } from "@avelom/device-capabilities";
+import { useWhatsAppPreference } from "../composables/useWhatsAppPreference";
 import type { SuperadminOverview, TenantRole } from "../types/superadmin";
 
 interface LessonType {
@@ -39,6 +40,12 @@ const {
 } = useNativePermissions();
 const callHintsEnabled = ref(false);
 const callHintsSaving = ref(false);
+const { whatsappApp, setWhatsAppApp } = useWhatsAppPreference();
+
+function onWhatsAppAppChange(event: Event) {
+  const value = (event.target as HTMLSelectElement).value;
+  setWhatsAppApp(value === "business" ? "business" : "whatsapp");
+}
 
 const isSuperadmin = computed(() => Boolean(user.value?.isSuperadmin));
 const canEdit = canManageTenant;
@@ -625,6 +632,21 @@ onMounted(() => {
                   : "Browser"
             }}
           </p>
+          <div class="space-y-2 pt-2 border-t border-neutral-200 dark:border-neutral-800">
+            <p class="font-medium">WhatsApp-App</p>
+            <p class="text-xs text-neutral-500">
+              Welche App beim Tippen auf WhatsApp geöffnet wird. Nützlich, wenn WhatsApp und WhatsApp Business
+              installiert sind.
+            </p>
+            <select
+              class="w-full max-w-md rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
+              :value="whatsappApp"
+              @change="onWhatsAppAppChange"
+            >
+              <option value="whatsapp">WhatsApp</option>
+              <option value="business">WhatsApp Business</option>
+            </select>
+          </div>
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="font-medium">Letzte Anrufe als Telefon-Vorschlag</p>
