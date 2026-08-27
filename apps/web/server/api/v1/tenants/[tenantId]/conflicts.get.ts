@@ -7,7 +7,7 @@ function queryString(value: unknown): string | undefined {
 }
 
 export default defineEventHandler(async (event) => {
-  const access = await requireTenantAccess(event, getRouterParam(event, "tenantId"));
+  const access = await requireTenantAccess(event, getRouterParam(event, "tenantId"), ["ADMIN"]);
   const query = getQuery(event);
 
   return listSchedulingConflicts(access.tenant.id, {

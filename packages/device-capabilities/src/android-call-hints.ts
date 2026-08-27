@@ -2,6 +2,7 @@ import type {
   CallHint,
   ContactWritePayload,
   DeviceCapabilities,
+  DeviceContactLookupResult,
   DeviceFeatureFlags,
   DevicePlatform,
   PickedContact,
@@ -50,6 +51,14 @@ export class AndroidCallHintCapabilities implements DeviceCapabilities {
 
   saveOrUpdateDeviceContact(payload: ContactWritePayload): Promise<void> {
     return this.inner.saveOrUpdateDeviceContact(payload);
+  }
+
+  lookupDeviceContact(phone: string): Promise<DeviceContactLookupResult> {
+    return this.inner.lookupDeviceContact(phone);
+  }
+
+  deleteDeviceContact(phone: string): Promise<void> {
+    return this.inner.deleteDeviceContact(phone);
   }
 
   getRecentCallHints(limit = 5): Promise<CallHint[]> {

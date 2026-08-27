@@ -37,7 +37,7 @@ interface ConflictAlternative {
   resourceId: string | null;
 }
 
-const { memberships, primaryTenant, teacherLabel, canAccessWorkspace } = useAuth();
+const { memberships, primaryTenant, teacherLabel, canManageTenant } = useAuth();
 
 const selectedTenantId = ref("");
 const fromDate = ref("");
@@ -132,7 +132,7 @@ function resetSelection() {
 }
 
 async function loadConflicts() {
-  if (!canAccessWorkspace.value || !activeTenantId.value || !fromDate.value || !toDate.value) {
+  if (!canManageTenant.value || !activeTenantId.value || !fromDate.value || !toDate.value) {
     conflicts.value = [];
     resetSelection();
     return;
@@ -253,7 +253,7 @@ onMounted(() => {
         color="neutral"
         icon="i-lucide-refresh-cw"
         :loading="loading"
-        :disabled="!canAccessWorkspace || !activeTenantId"
+        :disabled="!canManageTenant || !activeTenantId"
         @click="loadConflicts"
       >
         Neu laden
@@ -261,10 +261,10 @@ onMounted(() => {
     </div>
 
     <div
-      v-if="!canAccessWorkspace"
+      v-if="!canManageTenant"
       class="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 text-sm text-neutral-600 dark:text-neutral-400"
     >
-      Konflikte werden nur für Mandanten angezeigt, für die du berechtigt bist (Admin oder Mitarbeiter).
+      Konflikte können nur Admins ansehen und auflösen.
     </div>
 
     <div

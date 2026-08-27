@@ -3,6 +3,7 @@ import type {
   CallHint,
   ContactWritePayload,
   DeviceCapabilities,
+  DeviceContactLookupResult,
   DeviceFeatureFlags,
   DevicePlatform,
   PickedContact,
@@ -36,6 +37,8 @@ export class WebDeviceCapabilities implements DeviceCapabilities {
     return {
       pickContact: Boolean(contactPicker()),
       saveContact: true,
+      lookupContact: false,
+      deleteContact: false,
       callHints: false,
     };
   }
@@ -90,5 +93,13 @@ export class WebDeviceCapabilities implements DeviceCapabilities {
 
   async saveOrUpdateDeviceContact(payload: ContactWritePayload): Promise<void> {
     downloadVCard(payload);
+  }
+
+  async lookupDeviceContact(_phone: string): Promise<DeviceContactLookupResult> {
+    return { status: "unknown" };
+  }
+
+  async deleteDeviceContact(_phone: string): Promise<void> {
+    // Browser has no address-book write API.
   }
 }

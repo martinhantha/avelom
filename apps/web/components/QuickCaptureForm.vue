@@ -5,6 +5,7 @@ import type { CallHint } from "@avelom/device-capabilities";
 import { isCallHintsOptIn } from "@avelom/device-capabilities";
 import { useAuth } from "../composables/useAuth";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
+import { useDeviceContactLookup } from "../composables/useDeviceContactLookup";
 import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
 import { resolveAppointmentPhone } from "../utils/appointment-contact";
 import { commitUtterance, withLiveInterim } from "../utils/speech-transcript";
@@ -91,7 +92,7 @@ const emit = defineEmits<{
   cancel: [];
 }>();
 
-const { primaryTenant } = useAuth();
+const { primaryTenant, canManageTenant } = useAuth();
 const { device } = useDeviceCapabilities();
 
 const teacherLabel = computed(
@@ -123,6 +124,7 @@ const passengerName = ref("");
 const callHints = ref<CallHint[]>([]);
 const pickingContact = ref(false);
 const savingDeviceContact = ref(false);
+const removingDeviceContact = ref(false);
 const deviceContactHint = ref("");
 const STOP_COMMAND_RE =
   /(?:^|\s)(?:bitte\s+)?(?:speichern|fertig|ok(?:ay)?|o\.?\s*k\.?|stopp|stop|ende)(?:\s*[.!,])?\s*$/i;
@@ -488,12 +490,33 @@ const willCreateCustomer = computed(
   () => Boolean(passengerName.value.trim().length >= 2) && !form.customerId,
 );
 const canPickContact = computed(() => device.value.features.pickContact);
+const { lookup: deviceContactLookup, checking: checkingDeviceContact, canDelete: canDeleteDeviceContactFeature, savedOnDevice, refresh: refreshDeviceContact } =
+  useDeviceContactLookup(() => form.phone);
 const canSaveDeviceContact = computed(
   () =>
     device.value.features.saveContact &&
     Boolean(form.phone.trim()) &&
-    Boolean(passengerName.value.trim() || text.value.trim()),
+    Boolean(passengerName.value.trim() || text.value.trim()) &&
+    !savedOnDevice.value,
 );
+const canRemoveDeviceContact = computed(
+  () =>
+    canDeleteDeviceContactFeature.value && savedOnDevice.value && Boolean(form.phone.trim()),
+);
+const canManageDeviceContact = computed(
+  () =>
+    canSaveDeviceContact.value ||
+    canRemoveDeviceContact.value ||
+    Boolean(deviceContactHint.value) ||
+    (checkingDeviceContact.value && Boolean(form.phone.trim())),
+);
+const deviceContactStatusLabel = computed(() => {
+  if (deviceContactHint.value) return "";
+  if (!savedOnDevice.value) return "";
+  return deviceContactLookup.value.match?.googleSynced
+    ? "Bereits in Google Kontakte gespeichert."
+    : "Bereits im Telefon gespeichert.";
+});
 const showCallHintsOptInHint = computed(
   () => device.value.features.callHints && !isCallHintsOptIn() && !callHints.value.length,
 );
@@ -525,6 +548,7 @@ async function pickDeviceContact() {
     if (contact.name && !passengerName.value.trim()) {
       passengerName.value = contact.name;
     }
+    await refreshDeviceContact();
   } catch {
     deviceContactHint.value = "Kontakt konnte nicht gelesen werden.";
   } finally {
@@ -541,14 +565,41 @@ async function saveDeviceContact() {
       displayName: passengerName.value.trim() || text.value.trim() || "Avelom Kontakt",
       phoneE164: form.phone.trim() || undefined,
     });
-    deviceContactHint.value =
-      device.value.platform === "web"
-        ? "vCard heruntergeladen — auf dem Telefon importieren (Organisation: Avelom)."
-        : "Kontakt lokal unter „Avelom“ gespeichert, nicht im Google-Konto.";
+    await refreshDeviceContact();
+    if (device.value.platform === "web") {
+      deviceContactHint.value =
+        "vCard heruntergeladen — auf dem Telefon importieren (Organisation: Avelom).";
+    } else if (deviceContactLookup.value.match?.googleSynced) {
+      deviceContactHint.value = "Nummer ist schon in Google Kontakte gespeichert.";
+    } else {
+      deviceContactHint.value = "Kontakt lokal unter „Avelom“ gespeichert, nicht im Google-Konto.";
+    }
   } catch {
     deviceContactHint.value = "Kontakt konnte nicht gespeichert werden.";
   } finally {
     savingDeviceContact.value = false;
+  }
+}
+
+async function removeDeviceContact() {
+  if (!canRemoveDeviceContact.value) return;
+  const google = deviceContactLookup.value.match?.googleSynced;
+  const ok = window.confirm(
+    google
+      ? "Dieser Kontakt ist mit Google Kontakte synchronisiert und wird dort ebenfalls gelöscht. Fortfahren?"
+      : "Diesen Kontakt wirklich vom Telefon entfernen?",
+  );
+  if (!ok) return;
+  removingDeviceContact.value = true;
+  deviceContactHint.value = "";
+  try {
+    await device.value.deleteDeviceContact(form.phone.trim());
+    await refreshDeviceContact();
+    deviceContactHint.value = "Kontakt wurde vom Telefon entfernt.";
+  } catch {
+    deviceContactHint.value = "Kontakt konnte nicht entfernt werden.";
+  } finally {
+    removingDeviceContact.value = false;
   }
 }
 
@@ -709,6 +760,10 @@ watch(
 
 async function saveAppointment() {
   if (!primaryTenant.value || !canSave.value) return;
+  if (!isEditing.value && !canManageTenant.value) {
+    error.value = "Neue Termine kann nur ein Admin anlegen";
+    return;
+  }
 
   const startsAt = localDateTime(form.date, form.time);
   const endsAt = new Date(startsAt.getTime() + effectiveDuration.value * 60_000);
@@ -989,6 +1044,7 @@ onMounted(() => {
         <select
           v-model="form.teacherId"
           class="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
+          :disabled="!canManageTenant"
         >
           <option value="">Ohne {{ teacherLabel }}</option>
           <option v-for="teacher in options?.teachers || []" :key="teacher.id" :value="teacher.id">
@@ -1078,19 +1134,34 @@ onMounted(() => {
           <p v-else-if="showCallHintsOptInHint" class="text-xs text-neutral-500">
             Letzte Anrufe als Vorschlag: in den Einstellungen aktivieren (Android-App).
           </p>
-          <div v-if="canSaveDeviceContact" class="flex flex-wrap items-center gap-2">
+          <div v-if="canManageDeviceContact" class="flex flex-wrap items-center gap-2">
             <UButton
+              v-if="canSaveDeviceContact"
               type="button"
               size="xs"
               variant="ghost"
               color="neutral"
               icon="i-lucide-user-plus"
-              :loading="savingDeviceContact"
+              :loading="savingDeviceContact || checkingDeviceContact"
               @click="saveDeviceContact"
             >
               Aufs Telefon speichern
             </UButton>
-            <span v-if="deviceContactHint" class="text-xs text-neutral-500">{{ deviceContactHint }}</span>
+            <UButton
+              v-else-if="canRemoveDeviceContact"
+              type="button"
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-user-minus"
+              :loading="removingDeviceContact || checkingDeviceContact"
+              @click="removeDeviceContact"
+            >
+              Vom Telefon entfernen
+            </UButton>
+            <span v-if="deviceContactStatusLabel || deviceContactHint" class="text-xs text-neutral-500">
+              {{ deviceContactHint || deviceContactStatusLabel }}
+            </span>
           </div>
         </div>
       </UFormField>

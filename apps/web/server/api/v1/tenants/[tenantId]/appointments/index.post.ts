@@ -4,7 +4,7 @@ import { publishAppointmentCreated } from "~/server/utils/appointment-events";
 import { createAppointment } from "~/server/utils/scheduling";
 
 export default defineEventHandler(async (event) => {
-  const access = await requireTenantAccess(event, getRouterParam(event, "tenantId"));
+  const access = await requireTenantAccess(event, getRouterParam(event, "tenantId"), ["ADMIN"]);
   const body = await readBody(event);
   const appointment = await createAppointment(access.tenant.id, body);
 
@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
       "Neuer Termin",
     startsAt: appointment.startsAt,
     teacherName: appointment.teacher?.displayName ?? null,
+    teacherId: appointment.teacher?.id ?? null,
   });
 
   setResponseStatus(event, 201);

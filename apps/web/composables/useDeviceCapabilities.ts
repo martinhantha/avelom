@@ -7,7 +7,7 @@ const deviceReady = ref(false);
 const ssrSafe: DeviceCapabilities = {
   id: "web",
   platform: "web",
-  features: { pickContact: false, saveContact: false, callHints: false },
+  features: { pickContact: false, saveContact: false, lookupContact: false, deleteContact: false, callHints: false },
   startSpeechToText: () => fallback.startSpeechToText(),
   requestMicrophonePermission: () => fallback.requestMicrophonePermission(),
   takePhoto: () => fallback.takePhoto(),
@@ -15,6 +15,8 @@ const ssrSafe: DeviceCapabilities = {
   pickContact: () => fallback.pickContact(),
   getRecentCallHints: () => fallback.getRecentCallHints(),
   saveOrUpdateDeviceContact: (payload) => fallback.saveOrUpdateDeviceContact(payload),
+  lookupDeviceContact: (phone) => fallback.lookupDeviceContact(phone),
+  deleteDeviceContact: (phone) => fallback.deleteDeviceContact(phone),
 };
 
 export function installRuntimeDevice(device: DeviceCapabilities) {

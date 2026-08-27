@@ -1,20 +1,22 @@
 <script setup lang="ts">
 const route = useRoute();
-const { user, primaryTenant, logout, canAccessWorkspace } = useAuth();
+const { user, primaryTenant, logout, canManageTenant } = useAuth();
 
 const links = computed(() => {
   const base = [
     { to: "/", label: "Home", icon: "i-lucide-house" },
     { to: "/appointments", label: "Termine", icon: "i-lucide-calendar-days" },
     { to: "/archive", label: "Archiv", icon: "i-lucide-archive" },
-    { to: "/users", label: "Benutzer", icon: "i-lucide-users" },
-    { to: "/lesson-types", label: "Termintypen", icon: "i-lucide-list-checks" },
   ];
+  if (canManageTenant.value) {
+    base.push(
+      { to: "/users", label: "Benutzer", icon: "i-lucide-users" },
+      { to: "/lesson-types", label: "Termintypen", icon: "i-lucide-list-checks" },
+      { to: "/conflicts", label: "Konflikte", icon: "i-lucide-git-merge" },
+    );
+  }
   if (user.value?.isSuperadmin) {
     base.push({ to: "/tenants", label: "Mandanten", icon: "i-lucide-building-2" });
-  }
-  if (canAccessWorkspace.value) {
-    base.push({ to: "/conflicts", label: "Konflikte", icon: "i-lucide-git-merge" });
   }
   return base;
 });

@@ -6,6 +6,7 @@ import {
   withAvelomContactMeta,
   type ContactWritePayload,
   type DeviceCapabilities,
+  type DeviceContactLookupResult,
   type DeviceFeatureFlags,
   type DevicePlatform,
   type PickedContact,
@@ -24,6 +25,8 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
     return {
       pickContact: true,
       saveContact: true,
+      lookupContact: true,
+      deleteContact: true,
       callHints: this.platform === "android" && isCallHintsPluginAvailable(),
     };
   }
@@ -111,6 +114,35 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
     } catch {
       await super.saveOrUpdateDeviceContact(labeled);
     }
+  }
+
+  override async lookupDeviceContact(phone: string): Promise<DeviceContactLookupResult> {
+    const trimmed = phone.trim();
+    if (trimmed.replace(/\D/g, "").length < 6) return { status: "unknown" };
+    try {
+      const permission = await AvelomDevice.checkPermissions();
+      if (permission.contacts !== "granted" && permission.contacts !== "limited") {
+        return { status: "unknown" };
+      }
+      const result = await AvelomDevice.findContactByPhone({ phone: trimmed });
+      if (!result.found || !result.contactId) return { status: "missing" };
+      return {
+        status: "saved",
+        match: {
+          contactId: result.contactId,
+          displayName: result.displayName,
+          googleSynced: result.googleSynced,
+        },
+      };
+    } catch {
+      return { status: "unknown" };
+    }
+  }
+
+  override async deleteDeviceContact(phone: string): Promise<void> {
+    const trimmed = phone.trim();
+    if (!trimmed) return;
+    await AvelomDevice.deleteContactByPhone({ phone: trimmed });
   }
 }
 

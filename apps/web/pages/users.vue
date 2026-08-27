@@ -130,6 +130,11 @@ const editEmailTaken = computed(() => {
 });
 
 const roleOptions: TenantRole[] = ["ADMIN", "STAFF", "END_CUSTOMER"];
+const roleLabels: Record<TenantRole, string> = {
+  ADMIN: "Admin",
+  STAFF: "Benutzer",
+  END_CUSTOMER: "Kunde",
+};
 
 const filteredUsers = computed(() => {
   const q = filters.q.trim().toLowerCase();
@@ -708,7 +713,7 @@ watch(
           class="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
         >
           <option value="">Alle Rollen</option>
-          <option v-for="role in roleOptions" :key="role" :value="role">{{ role }}</option>
+          <option v-for="role in roleOptions" :key="role" :value="role">{{ roleLabels[role] }}</option>
         </select>
         <select
           v-if="isSuperadmin"
@@ -748,7 +753,7 @@ watch(
                   :color="m.tenantId === primaryTenant?.tenantId ? 'primary' : 'neutral'"
                   variant="subtle"
                 >
-                  {{ m.tenantName }} · {{ m.role }}
+                  {{ m.tenantName }} · {{ roleLabels[m.role] }}
                 </UBadge>
               </div>
               <UAlert
@@ -770,7 +775,7 @@ watch(
               @change="changeRole(u, ($event.target as HTMLSelectElement).value as TenantRole)"
             >
               <option value="" disabled>—</option>
-              <option v-for="role in roleOptions" :key="role" :value="role">{{ role }}</option>
+              <option v-for="role in roleOptions" :key="role" :value="role">{{ roleLabels[role] }}</option>
             </select>
             <UButton
               size="sm"
@@ -888,7 +893,7 @@ watch(
                   :disabled="m.removed || (!isSuperadmin && m.tenantId !== primaryTenant?.tenantId)"
                   class="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1 text-sm"
                 >
-                  <option v-for="role in roleOptions" :key="role" :value="role">{{ role }}</option>
+                  <option v-for="role in roleOptions" :key="role" :value="role">{{ roleLabels[role] }}</option>
                 </select>
                 <UBadge v-if="m.isNew" color="success" variant="subtle">neu</UBadge>
                 <UButton
@@ -924,7 +929,7 @@ watch(
                   v-model="newMembershipForm.role"
                   class="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1 text-sm"
                 >
-                  <option v-for="role in roleOptions" :key="role" :value="role">{{ role }}</option>
+                  <option v-for="role in roleOptions" :key="role" :value="role">{{ roleLabels[role] }}</option>
                 </select>
               </UFormField>
               <UButton
@@ -1038,7 +1043,7 @@ watch(
               v-model="addForm.role"
               class="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
             >
-              <option v-for="role in roleOptions" :key="role" :value="role">{{ role }}</option>
+              <option v-for="role in roleOptions" :key="role" :value="role">{{ roleLabels[role] }}</option>
             </select>
           </UFormField>
           <label v-if="isSuperadmin" class="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">

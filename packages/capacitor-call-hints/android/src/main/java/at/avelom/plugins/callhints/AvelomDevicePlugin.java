@@ -10,8 +10,10 @@ import android.app.PendingIntent;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderResult;
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -36,6 +38,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import java.util.ArrayList;
+import java.util.HashSet;
 
 @CapacitorPlugin(
     name = "AvelomDevice",
@@ -302,6 +305,13 @@ public class AvelomDevicePlugin extends Plugin {
         }
 
         try {
+            if (phone != null) {
+                PhoneContactMatch existing = firstMatchByPhone(phone);
+                if (existing != null) {
+                    call.resolve(toContactResult(existing));
+                    return;
+                }
+            }
             String contactId = applyInsert(displayName, phone, note, organization, true);
             if (contactId == null) {
                 contactId = applyInsert(displayName, phone, note, organization, false);
@@ -316,6 +326,155 @@ public class AvelomDevicePlugin extends Plugin {
         } catch (Exception exception) {
             call.reject("Failed to save local contact", exception);
         }
+    }
+
+    @PluginMethod
+    public void findContactByPhone(PluginCall call) {
+        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+            JSObject result = new JSObject();
+            result.put("found", false);
+            call.resolve(result);
+            return;
+        }
+        String phone = emptyToNull(call.getString("phone"));
+        PhoneContactMatch match = phone == null ? null : firstMatchByPhone(phone);
+        if (match == null) {
+            JSObject result = new JSObject();
+            result.put("found", false);
+            call.resolve(result);
+            return;
+        }
+        call.resolve(toContactResult(match));
+    }
+
+    @PluginMethod
+    public void deleteContactByPhone(PluginCall call) {
+        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+            requestPermissionForAlias("contacts", call, "deleteContactAfterPermission");
+            return;
+        }
+        performDeleteByPhone(call);
+    }
+
+    @PermissionCallback
+    private void deleteContactAfterPermission(PluginCall call) {
+        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+            call.reject("WRITE_CONTACTS permission denied");
+            return;
+        }
+        performDeleteByPhone(call);
+    }
+
+    private void performDeleteByPhone(PluginCall call) {
+        String phone = emptyToNull(call.getString("phone"));
+        if (phone == null) {
+            call.reject("Keine Telefonnummer");
+            return;
+        }
+        ArrayList<PhoneContactMatch> matches = lookupAllByPhone(phone);
+        ContentResolver resolver = getContext().getContentResolver();
+        int deleted = 0;
+        for (PhoneContactMatch match : matches) {
+            try {
+                Uri contactUri = ContentUris.withAppendedId(
+                    ContactsContract.Contacts.CONTENT_URI,
+                    Long.parseLong(match.contactId)
+                );
+                deleted += resolver.delete(contactUri, null, null);
+            } catch (Exception ignored) {
+                // Skip rows the OEM refuses to delete.
+            }
+        }
+        JSObject result = new JSObject();
+        result.put("deleted", deleted);
+        call.resolve(result);
+    }
+
+    private static class PhoneContactMatch {
+        String contactId;
+        String displayName;
+        boolean googleSynced;
+    }
+
+    private JSObject toContactResult(PhoneContactMatch match) {
+        JSObject result = new JSObject();
+        result.put("found", true);
+        result.put("contactId", match.contactId);
+        if (match.displayName != null && !match.displayName.isEmpty()) {
+            result.put("displayName", match.displayName);
+        }
+        result.put("googleSynced", match.googleSynced);
+        return result;
+    }
+
+    private PhoneContactMatch firstMatchByPhone(String phone) {
+        ArrayList<PhoneContactMatch> matches = lookupAllByPhone(phone);
+        return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    private ArrayList<PhoneContactMatch> lookupAllByPhone(String phone) {
+        ArrayList<PhoneContactMatch> matches = new ArrayList<>();
+        if (phone == null || phone.trim().isEmpty()) {
+            return matches;
+        }
+        Uri uri = Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            Uri.encode(phone.trim())
+        );
+        String[] projection = new String[] {
+            ContactsContract.PhoneLookup._ID,
+            ContactsContract.PhoneLookup.DISPLAY_NAME
+        };
+        ContentResolver resolver = getContext().getContentResolver();
+        try (Cursor cursor = resolver.query(uri, projection, null, null, null)) {
+            if (cursor == null) {
+                return matches;
+            }
+            HashSet<String> seen = new HashSet<>();
+            int idIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup._ID);
+            int nameIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME);
+            while (cursor.moveToNext()) {
+                if (idIdx < 0) {
+                    continue;
+                }
+                String contactId = cursor.getString(idIdx);
+                if (contactId == null || !seen.add(contactId)) {
+                    continue;
+                }
+                PhoneContactMatch match = new PhoneContactMatch();
+                match.contactId = contactId;
+                match.displayName = nameIdx >= 0 ? cursor.getString(nameIdx) : null;
+                match.googleSynced = isGoogleSynced(resolver, contactId);
+                matches.add(match);
+            }
+        } catch (Exception ignored) {
+            // Missing permission or OEM lookup quirks — treat as not found.
+        }
+        return matches;
+    }
+
+    private boolean isGoogleSynced(ContentResolver resolver, String contactId) {
+        try (Cursor cursor = resolver.query(
+            RawContacts.CONTENT_URI,
+            new String[] { RawContacts.ACCOUNT_TYPE },
+            RawContacts.CONTACT_ID + "=?",
+            new String[] { contactId },
+            null
+        )) {
+            if (cursor == null) {
+                return false;
+            }
+            int typeIdx = cursor.getColumnIndex(RawContacts.ACCOUNT_TYPE);
+            while (cursor.moveToNext()) {
+                String type = typeIdx >= 0 ? cursor.getString(typeIdx) : null;
+                if (type != null && type.startsWith(GOOGLE_ACCOUNT_PREFIX)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+        return false;
     }
 
     private String applyInsert(String displayName, String phone, String note, String organization, boolean useAvelomAccount)

@@ -15,6 +15,8 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "openAppSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openWhatsApp", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveLocalContact", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "findContactByPhone", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "deleteContactByPhone", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "showLocalNotification", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startSpeechRecognition", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopSpeechRecognition", returnType: CAPPluginReturnPromise)
@@ -116,6 +118,16 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
                     contact.note = note
                 }
                 if let phone = call.getString("phone")?.trimmingCharacters(in: .whitespacesAndNewlines), !phone.isEmpty {
+                    if let existing = self.lookupContacts(phone: phone).first {
+                        DispatchQueue.main.async {
+                            call.resolve([
+                                "contactId": existing.identifier,
+                                "displayName": existing.displayName,
+                                "found": true
+                            ])
+                        }
+                        return
+                    }
                     contact.phoneNumbers = [
                         CNLabeledValue(label: CNLabelPhoneNumberMobile, value: CNPhoneNumber(stringValue: phone))
                     ]
@@ -133,6 +145,69 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
             }
             DispatchQueue.main.async {
                 call.resolve(result)
+            }
+        }
+    }
+
+    @objc func findContactByPhone(_ call: CAPPluginCall) {
+        guard contactsAuthorized() else {
+            call.resolve(["found": false])
+            return
+        }
+        let phone = call.getString("phone")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        DispatchQueue.global(qos: .userInitiated).async {
+            let match = self.lookupContacts(phone: phone).first
+            DispatchQueue.main.async {
+                if let match {
+                    call.resolve([
+                        "found": true,
+                        "contactId": match.identifier,
+                        "displayName": match.displayName,
+                        "googleSynced": false
+                    ])
+                } else {
+                    call.resolve(["found": false])
+                }
+            }
+        }
+    }
+
+    @objc func deleteContactByPhone(_ call: CAPPluginCall) {
+        let store = CNContactStore()
+        store.requestAccess(for: .contacts) { granted, error in
+            if !granted {
+                DispatchQueue.main.async {
+                    call.reject(error?.localizedDescription ?? "Contacts permission denied")
+                }
+                return
+            }
+            let phone = call.getString("phone")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if phone.isEmpty {
+                DispatchQueue.main.async {
+                    call.reject("Keine Telefonnummer")
+                }
+                return
+            }
+            do {
+                let matches = self.lookupContacts(phone: phone)
+                let saveRequest = CNSaveRequest()
+                for match in matches {
+                    let fetched = try store.unifiedContact(
+                        withIdentifier: match.identifier,
+                        keysToFetch: [CNContactIdentifierKey as CNKeyDescriptor]
+                    )
+                    saveRequest.delete(fetched.mutableCopy() as! CNMutableContact)
+                }
+                if !matches.isEmpty {
+                    try store.execute(saveRequest)
+                }
+                DispatchQueue.main.async {
+                    call.resolve(["deleted": matches.count])
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    call.reject("Failed to delete contact", error.localizedDescription, error)
+                }
             }
         }
     }
@@ -159,19 +234,77 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
         default:
             mic = "prompt"
         }
-        let contacts: String
-        switch CNContactStore.authorizationStatus(for: .contacts) {
-        case .authorized:
-            contacts = "granted"
-        case .denied, .restricted:
-            contacts = "denied"
-        default:
-            contacts = "prompt"
-        }
         return [
             "microphone": mic,
-            "contacts": contacts
+            "contacts": contactsAuthorized() ? "granted" : contactsPromptOrDenied()
         ]
+    }
+
+    private func contactsAuthorized() -> Bool {
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+        if status == .authorized {
+            return true
+        }
+        // CNAuthorizationStatus.limited (iOS 18) rawValue is 4.
+        return status.rawValue == 4
+    }
+
+    private func contactsPromptOrDenied() -> String {
+        switch CNContactStore.authorizationStatus(for: .contacts) {
+        case .denied, .restricted:
+            return "denied"
+        default:
+            return "prompt"
+        }
+    }
+
+    private struct PhoneContactMatch {
+        let identifier: String
+        let displayName: String
+    }
+
+    private func lookupContacts(phone: String) -> [PhoneContactMatch] {
+        let needle = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return [] }
+        let store = CNContactStore()
+        let keys: [CNKeyDescriptor] = [
+            CNContactIdentifierKey as CNKeyDescriptor,
+            CNContactGivenNameKey as CNKeyDescriptor,
+            CNContactFamilyNameKey as CNKeyDescriptor,
+            CNContactOrganizationNameKey as CNKeyDescriptor,
+            CNContactPhoneNumbersKey as CNKeyDescriptor
+        ]
+        var matches: [PhoneContactMatch] = []
+        let request = CNContactFetchRequest(keysToFetch: keys)
+        do {
+            try store.enumerateContacts(with: request) { contact, _ in
+                let hit = contact.phoneNumbers.contains { labeled in
+                    Self.phonesMatch(labeled.value.stringValue, needle)
+                }
+                guard hit else { return }
+                let name = [contact.givenName, contact.familyName]
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
+                let display = name.isEmpty ? contact.organizationName : name
+                matches.append(PhoneContactMatch(identifier: contact.identifier, displayName: display))
+            }
+        } catch {
+            return []
+        }
+        return matches
+    }
+
+    private static func phonesMatch(_ a: String, _ b: String) -> Bool {
+        let x = digits(a)
+        let y = digits(b)
+        guard x.count >= 6, y.count >= 6 else { return false }
+        if x == y { return true }
+        return x.hasSuffix(String(y.suffix(8))) || y.hasSuffix(String(x.suffix(8)))
+    }
+
+    private static func digits(_ value: String) -> String {
+        value.filter { $0.isNumber }
     }
 
     private func localContainerId(_ store: CNContactStore) -> String? {

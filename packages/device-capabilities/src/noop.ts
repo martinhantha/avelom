@@ -2,6 +2,7 @@ import type {
   CallHint,
   ContactWritePayload,
   DeviceCapabilities,
+  DeviceContactLookupResult,
   DeviceFeatureFlags,
   DevicePlatform,
   PickedContact,
@@ -14,6 +15,8 @@ export class NoOpDeviceCapabilities implements DeviceCapabilities {
   readonly features: DeviceFeatureFlags = {
     pickContact: false,
     saveContact: false,
+    lookupContact: false,
+    deleteContact: false,
     callHints: false,
   };
 
@@ -42,6 +45,14 @@ export class NoOpDeviceCapabilities implements DeviceCapabilities {
   }
 
   async saveOrUpdateDeviceContact(_payload: ContactWritePayload): Promise<void> {
+    throw new Error("Contacts integration disabled.");
+  }
+
+  async lookupDeviceContact(_phone: string): Promise<DeviceContactLookupResult> {
+    return { status: "unknown" };
+  }
+
+  async deleteDeviceContact(_phone: string): Promise<void> {
     throw new Error("Contacts integration disabled.");
   }
 }

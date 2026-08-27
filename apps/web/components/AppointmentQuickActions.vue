@@ -3,6 +3,7 @@ import { Capacitor } from "@capacitor/core";
 import { AvelomDevice } from "@avelom/capacitor-call-hints";
 import { computed, ref } from "vue";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
+import { useDeviceContactLookup } from "../composables/useDeviceContactLookup";
 import { useWhatsAppPreference } from "../composables/useWhatsAppPreference";
 import {
   resolveAppointmentDisplayName,
@@ -39,9 +40,12 @@ const emit = defineEmits<{
 const { device } = useDeviceCapabilities();
 const { whatsappApp } = useWhatsAppPreference();
 const savingContact = ref(false);
-const contactSaveState = ref<"idle" | "saved" | "error">("idle");
+const removingContact = ref(false);
+const contactSaveState = ref<"idle" | "saved" | "error" | "removed">("idle");
 
 const phone = computed(() => resolveAppointmentPhone(props.appointment));
+const { lookup, checking: checkingContact, canDelete: canDeleteDeviceContact, savedOnDevice, refresh: refreshContact } =
+  useDeviceContactLookup(phone);
 const telHref = computed(() => (phone.value ? toTelHref(phone.value) : null));
 const whatsappHref = computed(() => (phone.value ? toWhatsAppHref(phone.value) : null));
 const whatsappLabel = computed(() => whatsappAppLabel(whatsappApp.value));
@@ -57,7 +61,12 @@ async function onWhatsAppClick(event: Event) {
   }
 }
 
-const canSaveContact = computed(() => device.value.features.saveContact && Boolean(phone.value));
+const canSaveContact = computed(
+  () => device.value.features.saveContact && Boolean(phone.value) && !savedOnDevice.value,
+);
+const canRemoveContact = computed(
+  () => canDeleteDeviceContact.value && savedOnDevice.value && Boolean(phone.value),
+);
 const canComplete = computed(
   () =>
     props.showComplete &&
@@ -72,6 +81,7 @@ const hasActions = computed(
       telHref.value ||
         whatsappHref.value ||
         canSaveContact.value ||
+        canRemoveContact.value ||
         canEdit.value ||
         canComplete.value ||
         canDelete.value,
@@ -79,7 +89,7 @@ const hasActions = computed(
 );
 
 async function saveDeviceContact() {
-  if (!phone.value) return;
+  if (!phone.value || !canSaveContact.value) return;
   savingContact.value = true;
   contactSaveState.value = "idle";
   try {
@@ -87,11 +97,33 @@ async function saveDeviceContact() {
       displayName: resolveAppointmentDisplayName(props.appointment),
       phoneE164: phone.value,
     });
+    await refreshContact();
     contactSaveState.value = "saved";
   } catch {
     contactSaveState.value = "error";
   } finally {
     savingContact.value = false;
+  }
+}
+
+async function removeDeviceContact() {
+  if (!phone.value || !canRemoveContact.value) return;
+  const ok = window.confirm(
+    lookup.value.match?.googleSynced
+      ? "Dieser Kontakt ist mit Google Kontakte synchronisiert und wird dort ebenfalls gelöscht. Fortfahren?"
+      : "Diesen Kontakt wirklich vom Telefon entfernen?",
+  );
+  if (!ok) return;
+  removingContact.value = true;
+  contactSaveState.value = "idle";
+  try {
+    await device.value.deleteDeviceContact(phone.value);
+    await refreshContact();
+    contactSaveState.value = "removed";
+  } catch {
+    contactSaveState.value = "error";
+  } finally {
+    removingContact.value = false;
   }
 }
 </script>
@@ -133,14 +165,30 @@ async function saveDeviceContact() {
       color="neutral"
       variant="soft"
       icon="i-lucide-user-plus"
-      :loading="savingContact"
+      :loading="savingContact || checkingContact"
       :square="compact"
-      aria-label="Kontakt speichern"
-      title="Kontakt speichern"
+      aria-label="Kontakt aufs Telefon speichern"
+      title="Kontakt aufs Telefon speichern"
       @click="saveDeviceContact"
     >
       <span v-if="!compact" class="hidden sm:inline">
-        {{ contactSaveState === "saved" ? "Gespeichert" : contactSaveState === "error" ? "Fehler" : "Kontakt" }}
+        {{ contactSaveState === "error" ? "Fehler" : "Kontakt" }}
+      </span>
+    </UButton>
+    <UButton
+      v-else-if="canRemoveContact"
+      :size="compact ? 'xs' : 'sm'"
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-user-minus"
+      :loading="removingContact || checkingContact"
+      :square="compact"
+      :aria-label="lookup.match?.googleSynced ? 'Aus Google Kontakte entfernen' : 'Kontakt vom Telefon entfernen'"
+      :title="lookup.match?.googleSynced ? 'Aus Google Kontakte entfernen' : 'Kontakt vom Telefon entfernen'"
+      @click="removeDeviceContact"
+    >
+      <span v-if="!compact" class="hidden sm:inline">
+        {{ contactSaveState === "error" ? "Fehler" : "Entfernen" }}
       </span>
     </UButton>
     <UButton

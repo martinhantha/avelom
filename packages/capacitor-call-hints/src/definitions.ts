@@ -44,4 +44,11 @@ export interface AvelomDevicePlugin {
     note?: string;
     organization?: string;
   }): Promise<{ contactId: string }>;
+  findContactByPhone(options: { phone: string }): Promise<{
+    found: boolean;
+    contactId?: string;
+    displayName?: string;
+    googleSynced?: boolean;
+  }>;
+  deleteContactByPhone(options: { phone: string }): Promise<{ deleted: number }>;
 }

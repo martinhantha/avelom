@@ -24,7 +24,8 @@ interface AppointmentListItem {
   } | null;
 }
 
-const { user, primaryTenant, teacherLabel, resourcesEnabled, canAccessWorkspace } = useAuth();
+const { user, primaryTenant, teacherLabel, resourcesEnabled, canManageTenant, canAccessWorkspace } =
+  useAuth();
 const isSuperadmin = computed(() => Boolean(user.value?.isSuperadmin));
 
 const overview = ref<SuperadminOverview | null>(null);
@@ -402,11 +403,18 @@ async function deleteAppointment(appointment: AppointmentListItem) {
       <UButton to="/archive" block size="xl" variant="outline" color="neutral" icon="i-lucide-archive">
         Archiv
       </UButton>
-      <UButton block size="xl" color="primary" icon="i-lucide-zap" @click="openAssistant">
+      <UButton
+        v-if="canManageTenant"
+        block
+        size="xl"
+        color="primary"
+        icon="i-lucide-zap"
+        @click="openAssistant"
+      >
         Schnellerfassung &amp; Assistent
       </UButton>
       <UButton
-        v-if="canAccessWorkspace"
+        v-if="canManageTenant"
         to="/conflicts"
         block
         size="xl"
@@ -477,6 +485,9 @@ async function deleteAppointment(appointment: AppointmentListItem) {
                 class="ml-auto shrink-0"
                 :appointment="appointment"
                 :loading="savingId === appointment.id"
+                :show-edit="canAccessWorkspace"
+                :show-complete="canAccessWorkspace"
+                :show-delete="canManageTenant"
                 @edit="openEditAppointment(appointment)"
                 @complete="markCompleted(appointment)"
                 @delete="deleteAppointment(appointment)"

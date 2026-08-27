@@ -36,4 +36,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
     session.value = null;
     return navigateTo(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
   }
+
+  const tenantAdminOnly = new Set(["/users", "/lesson-types", "/conflicts"]);
+  if (tenantAdminOnly.has(to.path)) {
+    const canManage =
+      Boolean(session.value?.user.isSuperadmin) || session.value?.memberships[0]?.role === "ADMIN";
+    if (!canManage) {
+      return navigateTo("/");
+    }
+  }
 });

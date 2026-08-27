@@ -102,3 +102,32 @@ export async function requireTenantAccess(
     role: membership.role,
   };
 }
+
+export async function getActorTeacherProfileId(
+  tenantId: string,
+  userId: string,
+): Promise<string | null> {
+  const profile = await prisma.teacherProfile.findFirst({
+    where: {
+      tenantId,
+      deletedAt: null,
+      membership: { userId, tenantId, deletedAt: null },
+    },
+    select: { id: true },
+  });
+  return profile?.id ?? null;
+}
+
+export async function staffAppointmentScope(access: TenantAccess): Promise<{
+  forceTeacherId: string | null;
+  empty: boolean;
+}> {
+  if (access.role !== "STAFF") {
+    return { forceTeacherId: null, empty: false };
+  }
+  const teacherId = await getActorTeacherProfileId(access.tenant.id, access.actorUserId);
+  if (!teacherId) {
+    return { forceTeacherId: null, empty: true };
+  }
+  return { forceTeacherId: teacherId, empty: false };
+}

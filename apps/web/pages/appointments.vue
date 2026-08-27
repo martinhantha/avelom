@@ -33,7 +33,7 @@ interface SchedulingOptions {
   teachers: { id: string; displayName: string }[];
 }
 
-const { primaryTenant, teacherLabel, resourcesEnabled } = useAuth();
+const { primaryTenant, teacherLabel, resourcesEnabled, canManageTenant, canAccessWorkspace } = useAuth();
 
 const appointments = ref<AppointmentListItem[]>([]);
 const pagination = ref<Pagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
@@ -291,7 +291,7 @@ function isToday(date: Date) {
 }
 
 async function loadOptions() {
-  if (!primaryTenant.value?.tenantId) return;
+  if (!primaryTenant.value?.tenantId || !canManageTenant.value) return;
   options.value = await $fetch<SchedulingOptions>(
     `/api/v1/tenants/${primaryTenant.value.tenantId}/scheduling/options`,
     { credentials: "include" },
@@ -431,6 +431,9 @@ watch(
           Termine
           <span class="ml-2 text-sm font-normal text-neutral-500">({{ pagination.total }})</span>
         </h1>
+        <p v-if="!canManageTenant" class="mt-1 text-sm text-neutral-500">
+          Nur eigene Termine. Löschen nur durch Admin.
+        </p>
       </div>
       <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
         <div class="inline-flex rounded-md border border-neutral-300 dark:border-neutral-700 overflow-hidden">
@@ -483,6 +486,7 @@ watch(
           />
         </UButton>
         <UButton
+          v-if="canManageTenant"
           variant="outline"
           color="neutral"
           icon="i-lucide-message-circle-question"
@@ -493,6 +497,7 @@ watch(
           <span class="hidden sm:inline">Assistent</span>
         </UButton>
         <UButton
+          v-if="canManageTenant"
           icon="i-lucide-plus"
           color="primary"
           aria-label="Neuer Termin"
@@ -523,6 +528,7 @@ watch(
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <UInput v-model="filters.q" placeholder="Suche Kunde oder Kontakttext" />
         <select
+          v-if="canManageTenant"
           v-model="filters.teacherId"
           class="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
         >
@@ -608,6 +614,9 @@ watch(
               class="ml-auto shrink-0"
               :appointment="appointment"
               :loading="savingId === appointment.id"
+              :show-edit="canAccessWorkspace"
+              :show-complete="canAccessWorkspace"
+              :show-delete="canManageTenant"
               @edit="openEditAppointment(appointment)"
               @complete="markCompleted(appointment)"
               @delete="deleteAppointment(appointment)"
@@ -733,6 +742,9 @@ watch(
                   compact
                   :appointment="appointment"
                   :loading="savingId === appointment.id"
+                  :show-edit="canAccessWorkspace"
+                  :show-complete="canAccessWorkspace"
+                  :show-delete="canManageTenant"
                   @edit="openEditAppointment(appointment)"
                   @complete="markCompleted(appointment)"
                   @delete="deleteAppointment(appointment)"

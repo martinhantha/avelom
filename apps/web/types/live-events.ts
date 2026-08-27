@@ -8,4 +8,5 @@ export interface AppointmentCreatedLiveEvent {
   title: string;
   startsAt: string;
   teacherName: string | null;
+  teacherId: string | null;
 }

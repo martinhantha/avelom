@@ -30,8 +30,25 @@ export type DevicePlatform = "web" | "android" | "ios";
 export interface DeviceFeatureFlags {
   pickContact: boolean;
   saveContact: boolean;
+  /** Native only: look up whether a number already exists in the device address book. */
+  lookupContact: boolean;
+  /** Native only: delete a device contact matched by phone number. */
+  deleteContact: boolean;
   /** True when the Android CallHints plugin is present (opt-in still required). */
   callHints: boolean;
+}
+
+export interface DeviceContactMatch {
+  contactId: string;
+  displayName?: string;
+  googleSynced?: boolean;
+}
+
+export type DeviceContactLookupStatus = "unknown" | "missing" | "saved";
+
+export interface DeviceContactLookupResult {
+  status: DeviceContactLookupStatus;
+  match?: DeviceContactMatch;
 }
 
 /**
@@ -51,4 +68,8 @@ export interface DeviceCapabilities {
   getRecentCallHints(limit?: number): Promise<CallHint[]>;
   /** Save or update device contact — must be user-triggered. Browser: vCard download. */
   saveOrUpdateDeviceContact(payload: ContactWritePayload): Promise<void>;
+  /** Address-book lookup by phone (includes Google-synced contacts on the device). */
+  lookupDeviceContact(phone: string): Promise<DeviceContactLookupResult>;
+  /** Delete matching device contacts by phone — must be user-triggered. */
+  deleteDeviceContact(phone: string): Promise<void>;
 }

@@ -22,7 +22,7 @@ interface Pagination {
   totalPages: number;
 }
 
-const { primaryTenant } = useAuth();
+const { primaryTenant, canManageTenant, canAccessWorkspace } = useAuth();
 
 const appointments = ref<AppointmentListItem[]>([]);
 const pagination = ref<Pagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
@@ -277,6 +277,9 @@ watch(
           Termin-Archiv
           <span class="ml-2 text-sm font-normal text-neutral-500">({{ pagination.total }})</span>
         </h1>
+        <p v-if="!canManageTenant" class="mt-1 text-sm text-neutral-500">
+          Nur eigene Termine. Löschen nur durch Admin.
+        </p>
       </div>
       <UButton
         variant="outline"
@@ -412,6 +415,7 @@ watch(
               {{ appointmentStatusLabel(appointment.status) }}
             </UBadge>
             <UButton
+              v-if="canAccessWorkspace"
               size="sm"
               color="primary"
               variant="soft"
@@ -422,6 +426,7 @@ watch(
               Reaktivieren
             </UButton>
             <UButton
+              v-if="canManageTenant"
               size="sm"
               color="error"
               variant="soft"

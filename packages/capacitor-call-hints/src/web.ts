@@ -50,6 +50,14 @@ export class AvelomDeviceWeb extends WebPlugin implements AvelomDevicePlugin {
     throw this.unimplemented("saveLocalContact is native-only.");
   }
 
+  async findContactByPhone(): Promise<{ found: boolean }> {
+    return { found: false };
+  }
+
+  async deleteContactByPhone(): Promise<{ deleted: number }> {
+    throw this.unimplemented("deleteContactByPhone is native-only.");
+  }
+
   async showLocalNotification(): Promise<void> {
     // Browser notifications are handled by the Notification API.
   }
