@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
+import { formatAppointmentTeachers } from "../utils/appointment-contact";
 
 interface AppointmentListItem {
   id: string;
@@ -13,6 +14,7 @@ interface AppointmentListItem {
   appointmentPhoneE164: string | null;
   unstructuredNote: string | null;
   teacher: { id: string; displayName: string } | null;
+  teachers?: { id: string; displayName: string }[] | null;
   resource: { id: string; name: string } | null;
   lessonType: { id: string; name: string } | null;
   customer: {
@@ -605,7 +607,7 @@ watch(
                 </UBadge>
               </div>
               <div class="mt-1.5 flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-neutral-400">
-                <span v-if="appointment.teacher">{{ teacherLabel }}: {{ appointment.teacher.displayName }}</span>
+                <span v-if="formatAppointmentTeachers(appointment)">{{ teacherLabel }}: {{ formatAppointmentTeachers(appointment) }}</span>
                 <span v-if="resourcesEnabled && appointment.resource">Ressource: {{ appointment.resource.name }}</span>
                 <span v-if="appointment.lessonType">Art: {{ appointment.lessonType.name }}</span>
               </div>
@@ -733,8 +735,8 @@ watch(
                     </UBadge>
                   </div>
                   <p class="mt-0.5 truncate font-medium">{{ appointmentTitle(appointment) }}</p>
-                  <p v-if="appointment.teacher" class="truncate text-neutral-500">
-                    {{ appointment.teacher.displayName }}
+                  <p v-if="formatAppointmentTeachers(appointment)" class="truncate text-neutral-500">
+                    {{ formatAppointmentTeachers(appointment) }}
                   </p>
                 </div>
                 <AppointmentQuickActions

@@ -28,19 +28,31 @@ export async function toAppointmentLiveEvent(
     createdByUserId?: string | null;
     appointmentContactText?: string | null;
     teacher?: { id: string; displayName: string } | null;
+    teachers?: Array<{ id: string; displayName: string }> | null;
     customer?: { displayName?: string | null } | null;
     lessonType?: { name?: string | null } | null;
   },
   extra?: { previousStartsAt?: string | null },
 ): Promise<AppointmentLiveEvent> {
-  let teacherUserId: string | null = null;
-  if (appointment.teacher?.id) {
-    const profile = await prisma.teacherProfile.findFirst({
-      where: { id: appointment.teacher.id, deletedAt: null },
-      select: { membership: { select: { userId: true } } },
-    });
-    teacherUserId = profile?.membership?.userId ?? null;
-  }
+  const assigned = appointment.teachers?.length
+    ? appointment.teachers
+    : appointment.teacher
+      ? [appointment.teacher]
+      : [];
+  const teacherIds = [...new Set(assigned.map((item) => item.id))];
+  const profiles = teacherIds.length
+    ? await prisma.teacherProfile.findMany({
+        where: { id: { in: teacherIds }, deletedAt: null },
+        select: { id: true, membership: { select: { userId: true } } },
+      })
+    : [];
+  const teacherUserIds = [
+    ...new Set(
+      profiles
+        .map((profile) => profile.membership?.userId)
+        .filter((userId): userId is string => Boolean(userId)),
+    ),
+  ];
 
   return {
     type,
@@ -48,12 +60,13 @@ export async function toAppointmentLiveEvent(
     appointmentId: appointment.id,
     actorUserId,
     createdByUserId: appointment.createdByUserId ?? null,
-    teacherUserId,
+    teacherUserId: teacherUserIds[0] ?? null,
+    teacherUserIds,
     title: appointmentEventTitle(appointment),
     startsAt: appointment.startsAt,
     previousStartsAt: extra?.previousStartsAt ?? null,
-    teacherName: appointment.teacher?.displayName ?? null,
-    teacherId: appointment.teacher?.id ?? null,
+    teacherName: assigned.map((item) => item.displayName).filter(Boolean).join(", ") || null,
+    teacherId: assigned[0]?.id ?? null,
   };
 }
 
@@ -79,7 +92,10 @@ export function shouldReceiveAppointmentLive(
 ): boolean {
   if (event.actorUserId === viewerUserId) return true;
 
-  const isAssignedTeacher = Boolean(event.teacherUserId && event.teacherUserId === viewerUserId);
+  const isAssignedTeacher = Boolean(
+    event.teacherUserIds?.includes(viewerUserId) ||
+      (event.teacherUserId && event.teacherUserId === viewerUserId),
+  );
   const isCreator = Boolean(event.createdByUserId && event.createdByUserId === viewerUserId);
 
   if (event.type === "appointment.created") {

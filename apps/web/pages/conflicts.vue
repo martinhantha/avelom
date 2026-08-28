@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { $fetch } from "ofetch";
 import { useAuth } from "../composables/useAuth";
 import { appointmentStatusColor, appointmentStatusLabel } from "../utils/appointment-status";
+import { formatAppointmentTeachers } from "../utils/appointment-contact";
 
 interface ConflictAppointment {
   id: string;
@@ -12,6 +13,7 @@ interface ConflictAppointment {
   version: number;
   appointmentContactText: string | null;
   teacher: { id: string; displayName: string } | null;
+  teachers?: { id: string; displayName: string }[] | null;
   resource: { id: string; name: string } | null;
   lessonType: { id: string; name: string } | null;
   customer: { id: string; displayName: string } | null;
@@ -368,7 +370,7 @@ onMounted(() => {
                   {{ formatDateTime(appointment.startsAt) }}–{{ formatTime(appointment.endsAt) }}
                 </p>
                 <div class="mt-1 flex flex-wrap gap-2 text-xs text-neutral-500">
-                  <span v-if="appointment.teacher">{{ teacherLabel }}: {{ appointment.teacher.displayName }}</span>
+                  <span v-if="formatAppointmentTeachers(appointment)">{{ teacherLabel }}: {{ formatAppointmentTeachers(appointment) }}</span>
                   <span v-if="appointment.resource">Ressource: {{ appointment.resource.name }}</span>
                   <UBadge
                     v-if="appointmentStatusLabel(appointment.status)"

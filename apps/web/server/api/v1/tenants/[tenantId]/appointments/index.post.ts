@@ -13,7 +13,8 @@ export default defineEventHandler(async (event) => {
 
   const body = ((await readBody(event)) ?? {}) as Record<string, unknown>;
   if (scope.forceTeacherId) {
-    body.teacherId = scope.forceTeacherId;
+    body.teacherIds = [scope.forceTeacherId];
+    delete body.teacherId;
   }
 
   const appointment = await createAppointment(access.tenant.id, body, access.actorUserId);

@@ -217,9 +217,10 @@ function toAppointmentDto(row: Prisma.AppointmentGetPayload<{ select: typeof app
   };
 }
 
-function assignedTeacherIdsFromRow(
-  row: Pick<Prisma.AppointmentGetPayload<{ select: typeof appointmentSelect }>, "teacherId" | "teachers">,
-): string[] {
+function assignedTeacherIdsFromRow(row: {
+  teacherId: string | null;
+  teachers: { teacherId: string }[];
+}): string[] {
   const ids = row.teachers.map((link) => link.teacherId);
   if (row.teacherId && !ids.includes(row.teacherId)) ids.unshift(row.teacherId);
   return ids;
@@ -231,7 +232,7 @@ function parseTeacherIds(body: Record<string, unknown>): string[] | undefined {
       throwValidation("teacherIds muss eine Liste sein", { field: "teacherIds" });
     }
     const ids: string[] = [];
-    for (const value of body.teacherIds) {
+    for (const value of body.teacherIds as unknown[]) {
       if (typeof value !== "string" || !value.trim()) continue;
       const id = assertUuid(value, "teacherIds");
       if (!ids.includes(id)) ids.push(id);
@@ -651,27 +652,39 @@ export async function createAppointment(
   await validateAppointmentReferences(tenantId, { lessonTypeId, teacherIds, resourceId, customerId });
   await validateSchedulingConstraints(tenantId, { startsAt, endsAt, status, teacherIds, resourceId });
 
-  const row = await prisma.appointment.create({
-    data: {
-      tenantId,
-      startsAt,
-      endsAt,
-      status,
-      lessonTypeId,
-      teacherId,
-      resourceId,
-      customerId,
-      createdByUserId: createdByUserId || null,
-      appointmentContactText: optionalTrimmedString(body.appointmentContactText),
-      appointmentPhoneRaw: optionalTrimmedString(body.appointmentPhoneRaw),
-      appointmentPhoneE164: optionalTrimmedString(body.appointmentPhoneE164),
-      unstructuredNote: optionalTrimmedString(body.unstructuredNote),
-      teachers: {
-        create: teacherIds.map((id) => ({ teacherId: id })),
+  const created = await prisma.$transaction(async (tx) => {
+    const appointment = await tx.appointment.create({
+      data: {
+        tenantId,
+        startsAt,
+        endsAt,
+        status,
+        lessonTypeId,
+        teacherId,
+        resourceId,
+        customerId,
+        createdByUserId: createdByUserId || null,
+        appointmentContactText: optionalTrimmedString(body.appointmentContactText),
+        appointmentPhoneRaw: optionalTrimmedString(body.appointmentPhoneRaw),
+        appointmentPhoneE164: optionalTrimmedString(body.appointmentPhoneE164),
+        unstructuredNote: optionalTrimmedString(body.unstructuredNote),
       },
-    },
+      select: { id: true },
+    });
+    if (teacherIds.length) {
+      await tx.appointmentTeacher.createMany({
+        data: teacherIds.map((id) => ({ appointmentId: appointment.id, teacherId: id })),
+      });
+    }
+    return appointment;
+  });
+  const row = await prisma.appointment.findFirst({
+    where: { id: created.id },
     select: appointmentSelect,
   });
+  if (!row) {
+    throwNotFound("Termin nicht gefunden", { appointmentId: created.id });
+  }
 
   return toAppointmentDto(row);
 }
@@ -751,18 +764,20 @@ export async function patchAppointment(
     data.unstructuredNote = optionalTrimmedString(body.unstructuredNote);
   }
 
-  await prisma.appointment.update({
-    where: { id: appointmentId },
-    data,
-  });
-  if (parsedTeacherIds) {
-    await prisma.appointmentTeacher.deleteMany({ where: { appointmentId } });
-    if (parsedTeacherIds.length) {
-      await prisma.appointmentTeacher.createMany({
-        data: parsedTeacherIds.map((id) => ({ appointmentId, teacherId: id })),
-      });
+  await prisma.$transaction(async (tx) => {
+    await tx.appointment.update({
+      where: { id: appointmentId },
+      data,
+    });
+    if (parsedTeacherIds) {
+      await tx.appointmentTeacher.deleteMany({ where: { appointmentId } });
+      if (parsedTeacherIds.length) {
+        await tx.appointmentTeacher.createMany({
+          data: parsedTeacherIds.map((id) => ({ appointmentId, teacherId: id })),
+        });
+      }
     }
-  }
+  });
   const row = await prisma.appointment.findFirst({
     where: { id: appointmentId },
     select: appointmentSelect,
@@ -1535,6 +1550,7 @@ function conflictAppointmentDto(row: Prisma.AppointmentGetPayload<{ select: type
     version: dto.version,
     appointmentContactText: dto.appointmentContactText,
     teacher: dto.teacher,
+    teachers: dto.teachers,
     resource: dto.resource,
     lessonType: dto.lessonType,
     customer: dto.customer
@@ -1604,7 +1620,12 @@ export async function listSchedulingConflicts(
   }
   for (const [teacherId, list] of byTeacher) {
     for (const cluster of clusterOverlapping(list)) {
-      const teacherName = cluster[0]?.teacher?.displayName || teacherLabel;
+      const teacherName =
+        cluster
+          .flatMap((item) => item.teachers)
+          .find((link) => link.teacherId === teacherId)?.teacher.displayName ||
+        cluster.find((item) => item.teacherId === teacherId)?.teacher?.displayName ||
+        teacherLabel;
       conflicts.push({
         id: `teacher:${teacherId}:${cluster.map((item) => item.id).sort().join("_")}`,
         type: "TIME_OVERLAP",
@@ -1690,8 +1711,39 @@ type SlotCheckAppointment = {
   startsAt: Date;
   endsAt: Date;
   teacherId: string | null;
+  teacherIds: string[];
   resourceId: string | null;
 };
+
+function toSlotCheckAppointment(row: {
+  id: string;
+  startsAt: Date;
+  endsAt: Date;
+  teacherId: string | null;
+  resourceId: string | null;
+  teachers?: { teacherId: string }[];
+}): SlotCheckAppointment {
+  return {
+    id: row.id,
+    startsAt: row.startsAt,
+    endsAt: row.endsAt,
+    teacherId: row.teacherId,
+    resourceId: row.resourceId,
+    teacherIds: assignedTeacherIdsFromRow({
+      teacherId: row.teacherId,
+      teachers: row.teachers ?? [],
+    }),
+  };
+}
+
+const slotCheckAppointmentSelect = {
+  id: true,
+  startsAt: true,
+  endsAt: true,
+  teacherId: true,
+  resourceId: true,
+  teachers: { select: { teacherId: true } },
+} satisfies Prisma.AppointmentSelect;
 
 function teacherBlockedByAvailability(
   rules: { weekday: number; startTime: string; endTime: string }[],
@@ -1749,7 +1801,7 @@ function slotIsFree(input: {
     const teacherBusy = input.nearby.some(
       (row) =>
         row.id !== input.excludeAppointmentId &&
-        row.teacherId === input.teacherId &&
+        Boolean(input.teacherId && row.teacherIds.includes(input.teacherId)) &&
         overlapsRange(input.startsAt, input.endsAt, row.startsAt, row.endsAt),
     );
     if (teacherBusy) return false;
@@ -1798,7 +1850,7 @@ export async function suggestNextPrioritySlot(
   const searchFrom = fromBusinessDateTime(searchStartDate, "00:00");
   const searchTo = fromBusinessDateTime(addDaysToDateString(searchEndDate, 1), "00:00");
 
-  const [teachers, resources, rules, exceptions, nearby, tenant] = await Promise.all([
+  const [teachers, resources, rules, exceptions, nearbyRows, tenant] = await Promise.all([
     prisma.teacherProfile.findMany({
       where: { tenantId, deletedAt: null, membership: { deletedAt: null } },
       select: { id: true, displayName: true },
@@ -1831,13 +1883,15 @@ export async function suggestNextPrioritySlot(
         startsAt: { lt: searchTo },
         endsAt: { gt: searchFrom },
       },
-      select: { id: true, startsAt: true, endsAt: true, teacherId: true, resourceId: true },
+      select: slotCheckAppointmentSelect,
     }),
     prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { defaultTeacherId: true, resourcesEnabled: true },
     }),
   ]);
+
+  const nearby = nearbyRows.map(toSlotCheckAppointment);
 
   const resourcesEnabled = tenant?.resourcesEnabled ?? true;
   const resourceId = resourcesEnabled
@@ -1993,7 +2047,7 @@ export async function suggestAppointmentAlternatives(
   const searchFrom = fromBusinessDateTime(startParts.date, "00:00");
   const searchTo = fromBusinessDateTime(addDaysToDateString(startParts.date, 8), "00:00");
 
-  const [teachers, resources, rules, exceptions, nearby, tenant] = await Promise.all([
+  const [teachers, resources, rules, exceptions, nearbyRows, tenant] = await Promise.all([
     prisma.teacherProfile.findMany({
       where: { tenantId, deletedAt: null, membership: { deletedAt: null } },
       select: { id: true, displayName: true },
@@ -2020,7 +2074,7 @@ export async function suggestAppointmentAlternatives(
         startsAt: { lt: searchTo },
         endsAt: { gt: searchFrom },
       },
-      select: { id: true, startsAt: true, endsAt: true, teacherId: true, resourceId: true },
+      select: slotCheckAppointmentSelect,
     }),
     prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -2028,6 +2082,7 @@ export async function suggestAppointmentAlternatives(
     }),
   ]);
 
+  const nearby = nearbyRows.map(toSlotCheckAppointment);
   const teacherLabel = tenant?.teacherLabel?.trim() || "Lehrer";
   const resourcesEnabled = tenant?.resourcesEnabled ?? true;
   const rulesByTeacher = new Map<string, { weekday: number; startTime: string; endTime: string }[]>();

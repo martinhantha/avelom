@@ -134,3 +134,15 @@ export async function staffAppointmentScope(access: TenantAccess): Promise<{
   }
   return { forceTeacherId: teacherId, empty: false };
 }
+
+export function staffOwnsAppointment(
+  forceTeacherId: string | null,
+  appointment: {
+    teachers?: Array<{ id: string }> | null;
+    teacher?: { id: string } | null;
+  },
+): boolean {
+  if (!forceTeacherId) return true;
+  if (appointment.teachers?.some((item) => item.id === forceTeacherId)) return true;
+  return appointment.teacher?.id === forceTeacherId;
+}

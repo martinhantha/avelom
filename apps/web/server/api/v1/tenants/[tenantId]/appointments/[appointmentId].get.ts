@@ -1,6 +1,6 @@
 import { getRouterParam } from "h3";
 import { throwNotFound } from "~/server/utils/api-errors";
-import { requireTenantAccess, staffAppointmentScope } from "~/server/utils/authz";
+import { requireTenantAccess, staffAppointmentScope, staffOwnsAppointment } from "~/server/utils/authz";
 import { getAppointment } from "~/server/utils/scheduling";
 
 export default defineEventHandler(async (event) => {
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     access.tenant.id,
     getRouterParam(event, "appointmentId"),
   );
-  if (scope.forceTeacherId && appointment.teacher?.id !== scope.forceTeacherId) {
+  if (!staffOwnsAppointment(scope.forceTeacherId, appointment)) {
     throwNotFound("Termin nicht gefunden", { appointmentId: appointment.id });
   }
   return appointment;

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
 import { useAuth } from "../composables/useAuth";
+import { formatAppointmentTeachers } from "../utils/appointment-contact";
 import type { SuperadminOverview, TenantRole } from "../types/superadmin";
 
 interface AppointmentListItem {
@@ -15,6 +16,7 @@ interface AppointmentListItem {
   appointmentPhoneE164: string | null;
   unstructuredNote: string | null;
   teacher: { id: string; displayName: string } | null;
+  teachers?: { id: string; displayName: string }[] | null;
   resource: { id: string; name: string } | null;
   lessonType: { id: string; name: string } | null;
   customer: {
@@ -476,7 +478,7 @@ async function deleteAppointment(appointment: AppointmentListItem) {
                   </UBadge>
                 </div>
                 <div class="mt-1.5 flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-neutral-400">
-                  <span v-if="appointment.teacher">{{ teacherLabel }}: {{ appointment.teacher.displayName }}</span>
+                  <span v-if="formatAppointmentTeachers(appointment)">{{ teacherLabel }}: {{ formatAppointmentTeachers(appointment) }}</span>
                   <span v-if="resourcesEnabled && appointment.resource">Ressource: {{ appointment.resource.name }}</span>
                   <span v-if="appointment.lessonType">Art: {{ appointment.lessonType.name }}</span>
                 </div>

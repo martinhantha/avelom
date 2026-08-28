@@ -14,6 +14,7 @@ export interface AppointmentLiveEvent {
   actorUserId: string;
   createdByUserId: string | null;
   teacherUserId: string | null;
+  teacherUserIds: string[];
   title: string;
   startsAt: string;
   previousStartsAt?: string | null;

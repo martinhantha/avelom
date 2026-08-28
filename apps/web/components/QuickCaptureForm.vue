@@ -74,6 +74,7 @@ interface AppointmentDto {
   appointmentPhoneE164?: string | null;
   unstructuredNote?: string | null;
   teacher: TeacherOption | null;
+  teachers?: TeacherOption[] | null;
   resource: ResourceOption | null;
   lessonType: LessonTypeOption | null;
   customer: CustomerOption | null;
@@ -381,9 +382,9 @@ function applyParsed(
   if (
     canManageTenant.value &&
     parsed.teacherId &&
-    (!isEditing.value || !slotSuggested || !form.teacherId)
+    (!isEditing.value || !slotSuggested || !form.teacherIds.length)
   ) {
-    form.teacherId = parsed.teacherId;
+    form.teacherIds = [parsed.teacherId];
   }
   if (parsed.resourceId) form.resourceId = parsed.resourceId;
   if (parsed.lessonTypeId) form.lessonTypeId = parsed.lessonTypeId;
@@ -477,13 +478,21 @@ onBeforeUnmount(() => {
   }
 });
 
+function assignedTeacherIds(appointment?: AppointmentDto | null, fallbackId?: string) {
+  const fromList = appointment?.teachers?.map((item) => item.id).filter(Boolean) ?? [];
+  if (fromList.length) return fromList;
+  if (appointment?.teacher?.id) return [appointment.teacher.id];
+  if (fallbackId) return [fallbackId];
+  return [];
+}
+
 const form = reactive({
   date: toDateInput(props.appointment ? new Date(props.appointment.startsAt) : initialStart),
   time: toTimeInput(props.appointment ? new Date(props.appointment.startsAt) : initialStart),
   durationMinutes: props.appointment
     ? durationMinutesFromRange(props.appointment.startsAt, props.appointment.endsAt)
     : 60,
-  teacherId: props.appointment?.teacher?.id ?? props.initialTeacherId ?? "",
+  teacherIds: assignedTeacherIds(props.appointment, props.initialTeacherId),
   resourceId: props.appointment?.resource?.id ?? "",
   lessonTypeId: props.appointment?.lessonType?.id ?? props.initialLessonTypeId ?? "",
   customerId: props.appointment?.customer?.id ?? "",
@@ -491,6 +500,21 @@ const form = reactive({
   note: props.appointment?.unstructuredNote ?? "",
 });
 let hydratingForm = false;
+
+function toggleTeacher(id: string) {
+  const index = form.teacherIds.indexOf(id);
+  if (index >= 0) {
+    form.teacherIds.splice(index, 1);
+    return;
+  }
+  form.teacherIds.push(id);
+}
+
+const assignedTeacherLabel = computed(() => {
+  const selected = (options.value?.teachers || []).filter((item) => form.teacherIds.includes(item.id));
+  if (selected.length) return selected.map((item) => item.displayName).join(", ");
+  return `Ohne ${teacherLabel.value}`;
+});
 
 if (props.appointment?.customer?.displayName) {
   passengerName.value = props.appointment.customer.displayName;
@@ -651,7 +675,7 @@ function fillFromAppointment(appointment: AppointmentDto) {
   form.date = toDateInput(startsAt);
   form.time = toTimeInput(startsAt);
   form.durationMinutes = durationMinutesFromRange(appointment.startsAt, appointment.endsAt);
-  form.teacherId = appointment.teacher?.id ?? "";
+  form.teacherIds = assignedTeacherIds(appointment);
   form.resourceId = appointment.resource?.id ?? "";
   form.lessonTypeId = appointment.lessonType?.id ?? "";
   form.customerId = appointment.customer?.id ?? "";
@@ -721,12 +745,13 @@ async function loadOptions() {
     if (props.appointment) {
       fillFromAppointment(props.appointment);
     } else {
-      if (!form.teacherId) {
+      if (!form.teacherIds.length) {
         const preferred = options.value.defaultTeacherId;
-        form.teacherId =
+        const fallback =
           preferred && options.value.teachers.some((teacher) => teacher.id === preferred)
             ? preferred
             : (options.value.teachers[0]?.id ?? "");
+        if (fallback) form.teacherIds = [fallback];
       }
       if (resourcesEnabled.value) {
         form.resourceId ||= options.value.resources[0]?.id ?? "";
@@ -809,11 +834,10 @@ async function saveAppointment() {
     }
 
     const phoneValue = form.phone.trim();
-    const payload = {
+    const payload: Record<string, unknown> = {
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),
       lessonTypeId: form.lessonTypeId || null,
-      teacherId: form.teacherId || null,
       resourceId: resourcesEnabled.value ? form.resourceId || null : undefined,
       customerId: customerId || null,
       appointmentContactText: text.value,
@@ -821,6 +845,10 @@ async function saveAppointment() {
       appointmentPhoneE164: phoneValue.startsWith("+") ? phoneValue : null,
       unstructuredNote: form.note.trim() || null,
     };
+    if (canManageTenant.value || !isEditing.value) {
+      payload.teacherIds = form.teacherIds;
+      payload.teacherId = form.teacherIds[0] ?? null;
+    }
 
     const result = isEditing.value
       ? await $fetch<AppointmentDto>(
@@ -840,6 +868,7 @@ async function saveAppointment() {
             status: "confirmed",
             lessonTypeId: payload.lessonTypeId || undefined,
             teacherId: payload.teacherId || undefined,
+            teacherIds: payload.teacherIds,
             resourceId: payload.resourceId || undefined,
             customerId: payload.customerId || undefined,
             appointmentPhoneRaw: payload.appointmentPhoneRaw || undefined,
@@ -1053,17 +1082,32 @@ onMounted(() => {
     </div>
 
     <div class="grid gap-3 sm:grid-cols-2">
-      <UFormField :label="teacherLabel">
-        <select
-          v-model="form.teacherId"
-          class="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
-          :disabled="!canManageTenant"
-        >
-          <option value="">Ohne {{ teacherLabel }}</option>
-          <option v-for="teacher in options?.teachers || []" :key="teacher.id" :value="teacher.id">
+      <UFormField :label="teacherLabel" class="sm:col-span-2">
+        <div v-if="canManageTenant" class="flex flex-wrap gap-2">
+          <UButton
+            v-for="teacher in options?.teachers || []"
+            :key="teacher.id"
+            type="button"
+            size="sm"
+            :variant="form.teacherIds.includes(teacher.id) ? 'solid' : 'soft'"
+            color="primary"
+            @click="toggleTeacher(teacher.id)"
+          >
             {{ teacher.displayName }}
-          </option>
-        </select>
+          </UButton>
+          <p v-if="!(options?.teachers || []).length" class="text-sm text-neutral-500">
+            Keine {{ teacherLabel }} hinterlegt.
+          </p>
+          <p v-else class="basis-full text-xs text-neutral-500">
+            Mehrere zuordnen möglich.
+          </p>
+        </div>
+        <p
+          v-else
+          class="rounded-md border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-sm"
+        >
+          {{ assignedTeacherLabel }}
+        </p>
       </UFormField>
 
       <UFormField v-if="resourcesEnabled" label="Ressource">

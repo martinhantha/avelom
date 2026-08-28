@@ -22,6 +22,27 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string | nu
   return null;
 }
 
+export function formatAppointmentTeachers(appointment: {
+  teachers?: Array<{ displayName: string }> | null;
+  teacher?: { displayName: string } | null;
+}): string {
+  const names = (appointment.teachers ?? []).map((item) => item.displayName).filter(Boolean);
+  if (names.length) return names.join(", ");
+  return appointment.teacher?.displayName ?? "";
+}
+
+export function isAssignedTeacher(
+  appointment: {
+    teachers?: Array<{ id: string }> | null;
+    teacher?: { id: string } | null;
+  },
+  teacherId: string | null | undefined,
+): boolean {
+  if (!teacherId) return false;
+  if (appointment.teachers?.some((item) => item.id === teacherId)) return true;
+  return appointment.teacher?.id === teacherId;
+}
+
 export function resolveAppointmentDisplayName(appointment: AppointmentContactSource): string {
   return firstNonEmpty(appointment.customer?.displayName, appointment.appointmentContactText) || "Avelom Kontakt";
 }

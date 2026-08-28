@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { AvelomDevice } from "@avelom/capacitor-call-hints";
 import { APPOINTMENT_LIVE_EVENT } from "~/types/live-events";
-import { resolveAppointmentDisplayName } from "~/utils/appointment-contact";
+import { resolveAppointmentDisplayName, formatAppointmentTeachers, isAssignedTeacher } from "~/utils/appointment-contact";
 
 const LEAD_MS = 15 * 60 * 1000;
 const LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
@@ -21,6 +21,7 @@ interface AppointmentListItem {
   status: string;
   appointmentContactText: string | null;
   teacher: { id: string; displayName: string } | null;
+  teachers?: { id: string; displayName: string }[] | null;
   customer: { displayName: string | null } | null;
 }
 
@@ -45,7 +46,7 @@ function toReminder(item: AppointmentListItem): AppointmentReminder {
     id: item.id,
     startsAt: item.startsAt,
     title: resolveAppointmentDisplayName(item),
-    teacherName: item.teacher?.displayName ?? null,
+    teacherName: formatAppointmentTeachers(item) || null,
   };
 }
 
@@ -129,7 +130,7 @@ export function useAppointmentReminders() {
     for (const item of items) {
       if (item.status === "cancelled" || item.status === "completed") continue;
       const myTeacherId = primaryTenant.value?.teacherProfileId;
-      if (!myTeacherId || item.teacher?.id !== myTeacherId) continue;
+      if (!isAssignedTeacher(item, myTeacherId)) continue;
       const start = new Date(item.startsAt).getTime();
       if (!Number.isFinite(start) || start <= now) continue;
       if (shownIds.value.has(item.id)) continue;

@@ -1,6 +1,6 @@
 import { getRequestHeader, getRouterParam, readBody } from "h3";
 import { throwNotFound } from "~/server/utils/api-errors";
-import { requireTenantAccess, staffAppointmentScope } from "~/server/utils/authz";
+import { requireTenantAccess, staffAppointmentScope, staffOwnsAppointment } from "~/server/utils/authz";
 import { publishAppointmentLive, toAppointmentLiveEvent } from "~/server/utils/appointment-events";
 import { getAppointment, patchAppointment } from "~/server/utils/scheduling";
 
@@ -15,11 +15,12 @@ export default defineEventHandler(async (event) => {
   const body = ((await readBody(event)) ?? {}) as Record<string, unknown>;
   const existing = await getAppointment(access.tenant.id, appointmentId);
 
-  if (scope.forceTeacherId && existing.teacher?.id !== scope.forceTeacherId) {
+  if (!staffOwnsAppointment(scope.forceTeacherId, existing)) {
     throwNotFound("Termin nicht gefunden", { appointmentId: existing.id });
   }
   if (scope.forceTeacherId) {
-    body.teacherId = scope.forceTeacherId;
+    delete body.teacherId;
+    delete body.teacherIds;
   }
 
   const updated = await patchAppointment(

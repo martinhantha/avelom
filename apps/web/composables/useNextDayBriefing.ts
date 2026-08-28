@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { AvelomDevice } from "@avelom/capacitor-call-hints";
 import { APPOINTMENT_LIVE_EVENT } from "~/types/live-events";
-import { resolveAppointmentDisplayName } from "~/utils/appointment-contact";
+import { resolveAppointmentDisplayName, isAssignedTeacher } from "~/utils/appointment-contact";
 
 const TZ = "Europe/Rome";
 const BRIEFING_HOUR = 8;
@@ -25,6 +25,7 @@ interface AppointmentListItem {
   status: string;
   appointmentContactText: string | null;
   teacher: { id: string; displayName: string } | null;
+  teachers?: { id: string; displayName: string }[] | null;
   customer: { displayName: string | null } | null;
 }
 
@@ -163,7 +164,7 @@ export function useNextDayBriefing() {
     );
 
     return response.data
-      .filter((item) => item.teacher?.id === myTeacherId)
+      .filter((item) => isAssignedTeacher(item, myTeacherId))
       .map((item) => ({
         id: item.id,
         startsAt: item.startsAt,
