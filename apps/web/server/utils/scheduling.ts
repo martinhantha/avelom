@@ -42,6 +42,13 @@ const appointmentSelect = {
   updatedAt: true,
   lessonType: { select: { id: true, name: true, defaultDurationMin: true } },
   teacher: { select: { id: true, displayName: true } },
+  teachers: {
+    select: {
+      teacherId: true,
+      teacher: { select: { id: true, displayName: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  },
   resource: { select: { id: true, name: true, capacity: true } },
   customer: {
     select: {
@@ -198,13 +205,47 @@ function normalizeTime(value: unknown, field: string): string {
 }
 
 function toAppointmentDto(row: Prisma.AppointmentGetPayload<{ select: typeof appointmentSelect }>) {
+  const teachers = row.teachers.map((link) => link.teacher);
   return {
     ...row,
+    teachers,
+    teacher: row.teacher ?? teachers[0] ?? null,
     startsAt: row.startsAt.toISOString(),
     endsAt: row.endsAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function assignedTeacherIdsFromRow(
+  row: Pick<Prisma.AppointmentGetPayload<{ select: typeof appointmentSelect }>, "teacherId" | "teachers">,
+): string[] {
+  const ids = row.teachers.map((link) => link.teacherId);
+  if (row.teacherId && !ids.includes(row.teacherId)) ids.unshift(row.teacherId);
+  return ids;
+}
+
+function parseTeacherIds(body: Record<string, unknown>): string[] | undefined {
+  if (hasOwn(body, "teacherIds")) {
+    if (!Array.isArray(body.teacherIds)) {
+      throwValidation("teacherIds muss eine Liste sein", { field: "teacherIds" });
+    }
+    const ids: string[] = [];
+    for (const value of body.teacherIds) {
+      if (typeof value !== "string" || !value.trim()) continue;
+      const id = assertUuid(value, "teacherIds");
+      if (!ids.includes(id)) ids.push(id);
+    }
+    if (ids.length > 8) {
+      throwValidation("Höchstens 8 Zuordnungen", { field: "teacherIds" });
+    }
+    return ids;
+  }
+  if (hasOwn(body, "teacherId")) {
+    const id = normalizeOptionalUuid(body.teacherId, "teacherId");
+    return id ? [id] : [];
+  }
+  return undefined;
 }
 
 function toCustomerDto(row: Prisma.CustomerGetPayload<{ select: typeof customerSelect }>) {
@@ -404,7 +445,7 @@ async function validateSchedulingConstraints(
     startsAt: Date;
     endsAt: Date;
     status: AppointmentStatus;
-    teacherId: string | null;
+    teacherIds: string[];
     resourceId: string | null;
     excludeAppointmentId?: string;
   },
@@ -424,17 +465,20 @@ async function validateSchedulingConstraints(
     ...(input.excludeAppointmentId ? { id: { not: input.excludeAppointmentId } } : {}),
   } satisfies Prisma.AppointmentWhereInput;
 
-  if (input.teacherId) {
-    await validateTeacherAvailability(tenantId, input.teacherId, input.startsAt, input.endsAt);
+  for (const teacherId of input.teacherIds) {
+    await validateTeacherAvailability(tenantId, teacherId, input.startsAt, input.endsAt);
     const conflicts = await prisma.appointment.findMany({
-      where: { ...overlapWhere, teacherId: input.teacherId },
+      where: {
+        ...overlapWhere,
+        OR: [{ teacherId }, { teachers: { some: { teacherId } } }],
+      },
       select: { id: true, startsAt: true, endsAt: true },
       take: 3,
     });
     if (conflicts.length) {
       throwConflict("Lehrer ist im Zeitraum bereits gebucht", {
         conflictType: "TIME_OVERLAP",
-        teacherId: input.teacherId,
+        teacherId,
         appointments: conflicts.map((row) => ({
           id: row.id,
           startsAt: row.startsAt.toISOString(),
@@ -462,14 +506,14 @@ async function validateSchedulingConstraints(
 async function validateAppointmentReferences(
   tenantId: string,
   input: {
-    teacherId?: string | null;
+    teacherIds?: string[];
     resourceId?: string | null;
     lessonTypeId?: string | null;
     customerId?: string | null;
   },
 ): Promise<void> {
-  if (input.teacherId) {
-    await requireTeacher(tenantId, input.teacherId);
+  for (const teacherId of input.teacherIds ?? []) {
+    await requireTeacher(tenantId, teacherId);
   }
   if (input.resourceId) {
     await requireResource(tenantId, input.resourceId);
@@ -526,13 +570,27 @@ export async function listAppointments(
     tenantId,
     deletedAt: null,
     ...(Object.keys(startsAtFilter).length ? { startsAt: startsAtFilter } : {}),
-    ...(teacherId ? { teacherId } : {}),
     ...(statusFilter?.length ? { status: { in: statusFilter } } : {}),
-    ...(q
+    ...(teacherId || q
       ? {
-          OR: [
-            { appointmentContactText: { contains: q, mode: "insensitive" } },
-            { customer: { displayName: { contains: q, mode: "insensitive" } } },
+          AND: [
+            ...(teacherId
+              ? [
+                  {
+                    OR: [{ teacherId }, { teachers: { some: { teacherId } } }],
+                  } satisfies Prisma.AppointmentWhereInput,
+                ]
+              : []),
+            ...(q
+              ? [
+                  {
+                    OR: [
+                      { appointmentContactText: { contains: q, mode: "insensitive" } },
+                      { customer: { displayName: { contains: q, mode: "insensitive" } } },
+                    ],
+                  } satisfies Prisma.AppointmentWhereInput,
+                ]
+              : []),
           ],
         }
       : {}),
@@ -582,15 +640,16 @@ export async function createAppointment(
   const endsAt = parseRequiredDate(body.endsAt, "endsAt");
   const status = normalizeStatus(body.status) ?? AppointmentStatus.confirmed;
   const lessonTypeId = normalizeOptionalUuid(body.lessonTypeId, "lessonTypeId") ?? null;
-  const teacherId = normalizeOptionalUuid(body.teacherId, "teacherId") ?? null;
+  const teacherIds = parseTeacherIds(body) ?? [];
+  const teacherId = teacherIds[0] ?? null;
   const resourcesEnabled = await tenantResourcesEnabled(tenantId);
   const resourceId = resourcesEnabled
     ? (normalizeOptionalUuid(body.resourceId, "resourceId") ?? null)
     : null;
   const customerId = normalizeOptionalUuid(body.customerId, "customerId") ?? null;
 
-  await validateAppointmentReferences(tenantId, { lessonTypeId, teacherId, resourceId, customerId });
-  await validateSchedulingConstraints(tenantId, { startsAt, endsAt, status, teacherId, resourceId });
+  await validateAppointmentReferences(tenantId, { lessonTypeId, teacherIds, resourceId, customerId });
+  await validateSchedulingConstraints(tenantId, { startsAt, endsAt, status, teacherIds, resourceId });
 
   const row = await prisma.appointment.create({
     data: {
@@ -607,6 +666,9 @@ export async function createAppointment(
       appointmentPhoneRaw: optionalTrimmedString(body.appointmentPhoneRaw),
       appointmentPhoneE164: optionalTrimmedString(body.appointmentPhoneE164),
       unstructuredNote: optionalTrimmedString(body.unstructuredNote),
+      teachers: {
+        create: teacherIds.map((id) => ({ teacherId: id })),
+      },
     },
     select: appointmentSelect,
   });
@@ -644,9 +706,9 @@ export async function patchAppointment(
   const lessonTypeId = hasOwn(body, "lessonTypeId")
     ? normalizeOptionalUuid(body.lessonTypeId, "lessonTypeId") ?? null
     : existing.lessonTypeId;
-  const teacherId = hasOwn(body, "teacherId")
-    ? normalizeOptionalUuid(body.teacherId, "teacherId") ?? null
-    : existing.teacherId;
+  const parsedTeacherIds = parseTeacherIds(body);
+  const teacherIds = parsedTeacherIds ?? assignedTeacherIdsFromRow(existing);
+  const teacherId = teacherIds[0] ?? null;
   const resourcesEnabled = await tenantResourcesEnabled(tenantId);
   const resourceId =
     resourcesEnabled && hasOwn(body, "resourceId")
@@ -656,12 +718,12 @@ export async function patchAppointment(
     ? normalizeOptionalUuid(body.customerId, "customerId") ?? null
     : existing.customerId;
 
-  await validateAppointmentReferences(tenantId, { lessonTypeId, teacherId, resourceId, customerId });
+  await validateAppointmentReferences(tenantId, { lessonTypeId, teacherIds, resourceId, customerId });
   await validateSchedulingConstraints(tenantId, {
     startsAt,
     endsAt,
     status,
-    teacherId,
+    teacherIds,
     resourceId,
     excludeAppointmentId: appointmentId,
   });
@@ -673,7 +735,7 @@ export async function patchAppointment(
   if (hasOwn(body, "endsAt")) data.endsAt = endsAt;
   if (hasOwn(body, "status")) data.status = status;
   if (hasOwn(body, "lessonTypeId")) data.lessonTypeId = lessonTypeId;
-  if (hasOwn(body, "teacherId")) data.teacherId = teacherId;
+  if (parsedTeacherIds) data.teacherId = teacherId;
   if (resourcesEnabled && hasOwn(body, "resourceId")) data.resourceId = resourceId;
   if (hasOwn(body, "customerId")) data.customerId = customerId;
   if (hasOwn(body, "appointmentContactText")) {
@@ -689,11 +751,25 @@ export async function patchAppointment(
     data.unstructuredNote = optionalTrimmedString(body.unstructuredNote);
   }
 
-  const row = await prisma.appointment.update({
+  await prisma.appointment.update({
     where: { id: appointmentId },
     data,
+  });
+  if (parsedTeacherIds) {
+    await prisma.appointmentTeacher.deleteMany({ where: { appointmentId } });
+    if (parsedTeacherIds.length) {
+      await prisma.appointmentTeacher.createMany({
+        data: parsedTeacherIds.map((id) => ({ appointmentId, teacherId: id })),
+      });
+    }
+  }
+  const row = await prisma.appointment.findFirst({
+    where: { id: appointmentId },
     select: appointmentSelect,
   });
+  if (!row) {
+    throwNotFound("Termin nicht gefunden", { appointmentId });
+  }
 
   return toAppointmentDto(row);
 }
@@ -1520,10 +1596,11 @@ export async function listSchedulingConflicts(
 
   const byTeacher = new Map<string, AppointmentRow[]>();
   for (const row of rows) {
-    if (!row.teacherId) continue;
-    const list = byTeacher.get(row.teacherId) ?? [];
-    list.push(row);
-    byTeacher.set(row.teacherId, list);
+    for (const teacherId of assignedTeacherIdsFromRow(row)) {
+      const list = byTeacher.get(teacherId) ?? [];
+      list.push(row);
+      byTeacher.set(teacherId, list);
+    }
   }
   for (const [teacherId, list] of byTeacher) {
     for (const cluster of clusterOverlapping(list)) {
