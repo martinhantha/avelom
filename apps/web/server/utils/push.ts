@@ -1,19 +1,65 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { importPKCS8, SignJWT } from "jose";
 import type { AppointmentLiveEvent } from "~/types/live-events";
 import { prisma } from "~/server/utils/prisma";
+import { getMonorepoRoot } from "~/server/utils/monorepo-root";
 import { liveEventNotificationCopy, pushRecipientUserIds } from "~/utils/appointment-live-audience";
 
 type CachedAccess = { token: string; expiresAt: number };
+type FirebaseConfig = { projectId: string; clientEmail: string; privateKey: string };
 
 const globalForFcm = globalThis as typeof globalThis & {
   avelomFcmAccess?: CachedAccess;
 };
 
-function firebaseConfig() {
+function parseServiceAccount(raw: string): FirebaseConfig | null {
+  try {
+    const parsed = JSON.parse(raw) as {
+      project_id?: string;
+      client_email?: string;
+      private_key?: string;
+    };
+    const projectId = parsed.project_id?.trim();
+    const clientEmail = parsed.client_email?.trim();
+    const privateKey = parsed.private_key?.replace(/\\n/g, "\n").trim();
+    if (!projectId || !clientEmail || !privateKey) return null;
+    return { projectId, clientEmail, privateKey };
+  } catch {
+    return null;
+  }
+}
+
+function firebaseConfig(): FirebaseConfig | null {
+  const file = process.env.FIREBASE_SERVICE_ACCOUNT_FILE?.trim();
+  if (file) {
+    try {
+      const path = file.startsWith("/") ? file : resolve(getMonorepoRoot(), file);
+      const fromFile = parseServiceAccount(readFileSync(path, "utf8"));
+      if (fromFile) return fromFile;
+      console.warn("[push] FIREBASE_SERVICE_ACCOUNT_FILE ist keine gültige Dienstkonto-JSON");
+    } catch {
+      console.warn("[push] FIREBASE_SERVICE_ACCOUNT_FILE konnte nicht gelesen werden");
+    }
+  }
+
+  const inline = process.env.FIREBASE_SERVICE_ACCOUNT?.trim();
+  if (inline) {
+    const fromInline = parseServiceAccount(inline);
+    if (fromInline) return fromInline;
+    console.warn("[push] FIREBASE_SERVICE_ACCOUNT ist keine gültige Dienstkonto-JSON");
+  }
+
   const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
   if (!projectId || !clientEmail || !privateKey) return null;
+  if (!privateKey.includes("BEGIN PRIVATE KEY")) {
+    console.warn(
+      "[push] FIREBASE_PRIVATE_KEY ist kein PEM-Schlüssel. In der heruntergeladenen Dienstkonto-JSON das Feld private_key verwenden (beginnt mit -----BEGIN PRIVATE KEY-----).",
+    );
+    return null;
+  }
   return { projectId, clientEmail, privateKey };
 }
 
@@ -44,7 +90,10 @@ async function firebaseAccessToken(): Promise<string | null> {
         assertion,
       }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn("[push] Firebase access token failed", response.status);
+      return null;
+    }
     const payload = (await response.json()) as { access_token?: string; expires_in?: number };
     if (!payload.access_token) return null;
     globalForFcm.avelomFcmAccess = {
@@ -52,7 +101,8 @@ async function firebaseAccessToken(): Promise<string | null> {
       expiresAt: Date.now() + Math.max(60, Number(payload.expires_in) || 3600) * 1000,
     };
     return payload.access_token;
-  } catch {
+  } catch (error) {
+    console.warn("[push] Firebase access token error", error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -93,6 +143,7 @@ async function sendFcmMessage(
     if (response.ok) return "ok";
     const text = await response.text();
     if (response.status === 404 || /UNREGISTERED|NOT_FOUND/i.test(text)) return "gone";
+    console.warn("[push] FCM send failed", response.status, text.slice(0, 300));
     return "error";
   } catch {
     return "error";
@@ -108,9 +159,15 @@ export async function sendAppointmentPush(event: AppointmentLiveEvent): Promise<
     where: { userId: { in: userIds } },
     select: { id: true, token: true },
   });
-  if (!rows.length) return;
+  if (!rows.length) {
+    console.warn("[push] no registered device tokens for", userIds);
+    return;
+  }
   const accessToken = await firebaseAccessToken();
-  if (!accessToken) return;
+  if (!accessToken) {
+    console.warn("[push] could not get Firebase access token");
+    return;
+  }
   const copy = liveEventNotificationCopy(event);
   const data = {
     type: event.type,
