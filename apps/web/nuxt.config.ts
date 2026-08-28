@@ -47,7 +47,8 @@ export default defineNuxtConfig({
       meta: [
         { name: "description", content: "Avelom — Prototyp Schnellerfassung & Planung" },
         { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-        { name: "theme-color", content: "#000000" },
+        { name: "theme-color", content: "#162230", media: "(prefers-color-scheme: light)" },
+        { name: "theme-color", content: "#0c1219", media: "(prefers-color-scheme: dark)" },
       ],
       link: [
         { rel: "icon", type: "image/png", href: "/favicon.png" },

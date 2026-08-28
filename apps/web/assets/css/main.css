@@ -1,6 +1,45 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
+/* Brand tokens from the Avelom logo: coral mark #FC5A4C, navy wordmark #162230. */
+@theme static {
+  --color-coral-50: #fff5f4;
+  --color-coral-100: #ffe8e6;
+  --color-coral-200: #ffd1cc;
+  --color-coral-300: #feb0a9;
+  --color-coral-400: #fd8278;
+  --color-coral-500: #fc5a4c;
+  --color-coral-600: #eb4133;
+  --color-coral-700: #c92e21;
+  --color-coral-800: #992d24;
+  --color-coral-900: #71251e;
+  --color-coral-950: #3f1612;
+
+  --color-ocean-50: #f3f8f9;
+  --color-ocean-100: #e4f0f3;
+  --color-ocean-200: #c9e2e8;
+  --color-ocean-300: #a4d0d9;
+  --color-ocean-400: #67b1c1;
+  --color-ocean-500: #3e8898;
+  --color-ocean-600: #337684;
+  --color-ocean-700: #295f6a;
+  --color-ocean-800: #214750;
+  --color-ocean-900: #1a363d;
+  --color-ocean-950: #102023;
+
+  --color-ink-50: #f5f6f8;
+  --color-ink-100: #ebeef2;
+  --color-ink-200: #d5dae1;
+  --color-ink-300: #b5bdc7;
+  --color-ink-400: #8a93a0;
+  --color-ink-500: #6a7381;
+  --color-ink-600: #515a68;
+  --color-ink-700: #3b4553;
+  --color-ink-800: #24303e;
+  --color-ink-900: #162230;
+  --color-ink-950: #0c1219;
+}
+
 :root {
   --app-safe-top: env(safe-area-inset-top, 0px);
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
