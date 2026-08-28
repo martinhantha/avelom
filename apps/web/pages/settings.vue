@@ -25,7 +25,7 @@ interface AvailabilityRule {
   priority: number;
 }
 
-const { user, primaryTenant, refreshSession, canManageTenant } = useAuth();
+const { user, primaryTenant, refreshSession, canManageTenant, speechRecognitionEnabled } = useAuth();
 const { device, setCallHintsOptIn } = useDeviceCapabilities();
 const {
   isNative,
@@ -37,7 +37,7 @@ const {
   refreshStatus,
   requestNow,
   openAppSettings,
-} = useNativePermissions();
+} = useNativePermissions({ needMicrophone: speechRecognitionEnabled });
 const callHintsEnabled = ref(false);
 const callHintsSaving = ref(false);
 const { whatsappApp, setWhatsAppApp } = useWhatsAppPreference();
@@ -681,12 +681,14 @@ onMounted(() => {
             </label>
           </div>
           <div v-if="isNative" class="space-y-3 pt-2 border-t border-neutral-200 dark:border-neutral-800">
-            <p class="font-medium">Mikrofon & Kontakte</p>
+            <p class="font-medium">{{ speechRecognitionEnabled ? "Mikrofon & Kontakte" : "Kontakte" }}</p>
             <p class="text-xs text-neutral-500">
-              Spracheingabe und Adressbuch. Kontakte werden lokal unter „Avelom“ gespeichert, nicht im Google-Konto.
+              <template v-if="speechRecognitionEnabled">Spracheingabe und Adressbuch. </template>
+              <template v-else>Adressbuch. </template>
+              Kontakte werden lokal unter „Avelom“ gespeichert, nicht im Google-Konto.
             </p>
             <ul class="text-sm space-y-1">
-              <li class="flex items-center justify-between gap-3">
+              <li v-if="speechRecognitionEnabled" class="flex items-center justify-between gap-3">
                 <span>Mikrofon</span>
                 <UBadge :color="microphoneGranted ? 'success' : 'neutral'" variant="subtle">
                   {{ microphoneGranted ? "Erlaubt" : "Nicht erlaubt" }}

@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { toValue, type MaybeRefOrGetter } from "vue";
 import type { AvelomDevicePermissionStatus } from "@avelom/capacitor-call-hints";
 
 const PROMPT_SESSION_KEY = "avelom.device.permissionsPrompted";
@@ -12,17 +13,25 @@ function isGranted(state: string | undefined) {
   return state === "granted" || state === "limited";
 }
 
-export function useNativePermissions(options?: { autoPrompt?: boolean }) {
+export function useNativePermissions(options?: {
+  autoPrompt?: boolean;
+  needMicrophone?: MaybeRefOrGetter<boolean>;
+}) {
   const open = ref(false);
   const requesting = ref(false);
   const status = ref<AvelomDevicePermissionStatus>({ ...emptyStatus });
   const isNative = computed(() => Capacitor.isNativePlatform());
+  const needMicrophone = computed(() => toValue(options?.needMicrophone) ?? true);
 
   const microphoneGranted = computed(() => isGranted(status.value.microphone));
   const contactsGranted = computed(() => isGranted(status.value.contacts));
-  const allGranted = computed(() => microphoneGranted.value && contactsGranted.value);
+  const allGranted = computed(
+    () => contactsGranted.value && (!needMicrophone.value || microphoneGranted.value),
+  );
   const anyDenied = computed(
-    () => status.value.microphone === "denied" || status.value.contacts === "denied",
+    () =>
+      status.value.contacts === "denied" ||
+      (needMicrophone.value && status.value.microphone === "denied"),
   );
 
   async function plugin() {
@@ -43,7 +52,10 @@ export function useNativePermissions(options?: { autoPrompt?: boolean }) {
     if (!Capacitor.isNativePlatform()) return;
     requesting.value = true;
     try {
-      status.value = await (await plugin()).requestAllPermissions();
+      const device = await plugin();
+      status.value = needMicrophone.value
+        ? await device.requestAllPermissions()
+        : await device.requestPermissions({ alias: "contacts" });
       if (allGranted.value) open.value = false;
     } finally {
       requesting.value = false;

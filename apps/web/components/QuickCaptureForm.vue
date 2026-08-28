@@ -274,6 +274,7 @@ function setupSpeech() {
 }
 
 async function toggleSpeech() {
+  if (!speechRecognitionEnabled.value) return;
   speechError.value = "";
   if (speechListening.value) {
     speechListening.value = false;
@@ -895,12 +896,10 @@ onMounted(() => {
       :description="conflictType ? `${error} (${conflictType})` : error"
     />
 
-    <div
-      v-if="speechRecognitionEnabled"
-      class="rounded-lg border border-primary-200 dark:border-primary-900 bg-primary-50/70 dark:bg-primary-950/30 p-3 space-y-3"
-    >
+    <div class="rounded-lg border border-primary-200 dark:border-primary-900 bg-primary-50/70 dark:bg-primary-950/30 p-3 space-y-3">
       <div class="flex flex-wrap gap-2">
         <UButton
+          v-if="speechRecognitionEnabled"
           type="button"
           :color="speechListening ? 'error' : 'primary'"
           :variant="speechListening ? 'solid' : undefined"
@@ -923,8 +922,10 @@ onMounted(() => {
         </UButton>
       </div>
       <p class="text-xs text-neutral-600 dark:text-neutral-400">
-        Beispiel: „morgen Flug Martin, Passagier Alexandra, Telefon +49 333 6788. Fertig.“
-        Am Ende „Fertig“, „Speichern“ oder „OK“ sagen, dann stoppt die Aufnahme.
+        Beispiel: „morgen Flug Martin, Passagier Alexandra, Telefon +49 333 6788{{ speechRecognitionEnabled ? ". Fertig." : "." }}“
+        <template v-if="speechRecognitionEnabled">
+          Am Ende „Fertig“, „Speichern“ oder „OK“ sagen, dann stoppt die Aufnahme.
+        </template>
         Ohne Uhrzeit wird der nächste freie Termin mit der höchsten Priorität vorgeschlagen.
       </p>
     </div>

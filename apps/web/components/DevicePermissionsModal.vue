@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const { speechRecognitionEnabled } = useAuth();
 const {
   open,
   requesting,
@@ -9,7 +10,7 @@ const {
   anyDenied,
   requestNow,
   openAppSettings,
-} = useNativePermissions({ autoPrompt: true });
+} = useNativePermissions({ autoPrompt: true, needMicrophone: speechRecognitionEnabled });
 
 function permissionLabel(granted: boolean) {
   return granted ? "Erlaubt" : "Noch nicht erlaubt";
@@ -23,10 +24,12 @@ function permissionLabel(granted: boolean) {
     </template>
     <template #body>
       <p class="text-sm text-neutral-600 dark:text-neutral-400">
-        Avelom braucht Mikrofon (Spracheingabe) und Kontakte (Adressbuch). Die Systemabfrage erscheint sofort.
+        Avelom braucht
+        <template v-if="speechRecognitionEnabled">Mikrofon (Spracheingabe) und </template>
+        Kontakte (Adressbuch). Die Systemabfrage erscheint sofort.
       </p>
       <ul class="mt-4 space-y-2 text-sm">
-        <li class="flex items-center justify-between gap-3">
+        <li v-if="speechRecognitionEnabled" class="flex items-center justify-between gap-3">
           <span>Mikrofon</span>
           <UBadge :color="microphoneGranted ? 'success' : 'neutral'" variant="subtle">
             {{ permissionLabel(microphoneGranted) }}
