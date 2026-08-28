@@ -12,6 +12,8 @@ export interface AppointmentLiveEvent {
   tenantId: string;
   appointmentId: string;
   actorUserId: string;
+  createdByUserId: string | null;
+  teacherUserId: string | null;
   title: string;
   startsAt: string;
   previousStartsAt?: string | null;

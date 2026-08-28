@@ -131,9 +131,7 @@ export function useAppointmentAlerts() {
   function show(event: AppointmentLiveEvent) {
     window.dispatchEvent(new CustomEvent(APPOINTMENT_LIVE_EVENT, { detail: event }));
 
-    const actorId = event.actorUserId;
-    const ownFocusedTab = actorId === user.value?.id && document.hasFocus();
-    if (ownFocusedTab) return;
+    if (event.actorUserId === user.value?.id) return;
 
     alert.value = event;
     canAskNotifications.value = browserCanAskNotifications();

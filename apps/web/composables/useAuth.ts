@@ -11,6 +11,7 @@ export function useAuth() {
   const speechRecognitionEnabled = computed(
     () => primaryTenant.value?.speechRecognitionEnabled ?? false,
   );
+  const nextDayBriefingEnabled = computed(() => user.value?.nextDayBriefingEnabled !== false);
   const canManageTenant = computed(
     () => Boolean(user.value?.isSuperadmin || primaryTenant.value?.role === "ADMIN"),
   );
@@ -60,6 +61,7 @@ export function useAuth() {
     teacherLabel,
     resourcesEnabled,
     speechRecognitionEnabled,
+    nextDayBriefingEnabled,
     canManageTenant,
     canAccessWorkspace,
     login,

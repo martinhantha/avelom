@@ -113,10 +113,13 @@ model User {
   disabledAt DateTime?
   deletedAt DateTime?
   deletedByUserId String? @db.Uuid
+  /// when true, send next-day appointment briefing at 08:00; default on
+  nextDayBriefingEnabled Boolean @default(true)
 
   memberships          Membership[]
   assistantPreferences UserAssistantPreference[]
   tenantsDeletedAsUser Tenant[] @relation("TenantDeletedBy")
+  appointmentsCreated  Appointment[] @relation("AppointmentCreatedBy")
 }
 
 model Membership {
@@ -299,11 +302,13 @@ model Appointment {
   parseSnapshot         Json?
   version               Int               @default(1)
   createdAt             DateTime          @default(now())
+  createdByUserId       String?           @db.Uuid
   updatedAt             DateTime          @updatedAt
   deletedAt             DateTime?
   deletedByUserId       String?           @db.Uuid
 
   tenant     Tenant          @relation(fields: [tenantId], references: [id])
+  createdBy  User?           @relation("AppointmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   lessonType LessonType?     @relation(fields: [lessonTypeId], references: [id])
   teacher    TeacherProfile? @relation(fields: [teacherId], references: [id])
   resource   Resource?       @relation(fields: [resourceId], references: [id])
@@ -311,6 +316,7 @@ model Appointment {
 
   @@index([tenantId, startsAt])
   @@index([tenantId, teacherId, startsAt])
+  @@index([createdByUserId])
 }
 
 model AvailabilityRule {

@@ -25,7 +25,7 @@ interface AvailabilityRule {
   priority: number;
 }
 
-const { user, primaryTenant, refreshSession, canManageTenant, speechRecognitionEnabled } = useAuth();
+const { user, session, primaryTenant, refreshSession, canManageTenant, speechRecognitionEnabled } = useAuth();
 const { device, setCallHintsOptIn } = useDeviceCapabilities();
 const {
   isNative,
@@ -40,7 +40,17 @@ const {
 } = useNativePermissions({ needMicrophone: speechRecognitionEnabled });
 const callHintsEnabled = ref(false);
 const callHintsSaving = ref(false);
+const nextDayBriefingEnabledLocal = ref(true);
+const briefingSaving = ref(false);
 const { whatsappApp, setWhatsAppApp } = useWhatsAppPreference();
+
+watch(
+  () => user.value?.nextDayBriefingEnabled,
+  (value) => {
+    nextDayBriefingEnabledLocal.value = value !== false;
+  },
+  { immediate: true },
+);
 
 function onWhatsAppAppChange(event: Event) {
   const value = (event.target as HTMLSelectElement).value;
@@ -179,6 +189,27 @@ function setInfo(msg: string) {
 function setError(msg: string) {
   error.value = msg;
   info.value = "";
+}
+async function saveNextDayBriefing(enabled: boolean) {
+  nextDayBriefingEnabledLocal.value = enabled;
+  briefingSaving.value = true;
+  try {
+    session.value = await $fetch("/api/auth/me", {
+      method: "PATCH",
+      credentials: "include",
+      body: { nextDayBriefingEnabled: enabled },
+    });
+    setInfo(
+      enabled
+        ? "Vortags-Info aktiv – um 8 Uhr, wenn morgen Termine anstehen."
+        : "Vortags-Info deaktiviert.",
+    );
+  } catch (e: unknown) {
+    nextDayBriefingEnabledLocal.value = user.value?.nextDayBriefingEnabled !== false;
+    setError(apiMessage(e, "Einstellung konnte nicht gespeichert werden"));
+  } finally {
+    briefingSaving.value = false;
+  }
 }
 async function toggleCallHints(enabled: boolean) {
   callHintsSaving.value = true;
@@ -633,6 +664,28 @@ onMounted(() => {
     </div>
 
     <section v-if="activeTab === 'account'" class="grid gap-4 lg:grid-cols-2">
+      <UCard class="lg:col-span-2">
+        <template #header><h2 class="font-medium">Benachrichtigungen</h2></template>
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="font-medium">Termine am nächsten Tag</p>
+            <p class="text-xs text-neutral-500 mt-1">
+              Um 8 Uhr eine Übersicht, wenn du am nächsten Tag eigene Termine hast — wie viele und wann.
+              Standardmäßig aktiv.
+            </p>
+          </div>
+          <label class="relative inline-flex items-center shrink-0 mt-1 cursor-pointer">
+            <input
+              type="checkbox"
+              class="sr-only peer"
+              :checked="nextDayBriefingEnabledLocal"
+              :disabled="briefingSaving"
+              @change="saveNextDayBriefing(!nextDayBriefingEnabledLocal)"
+            />
+            <div class="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 dark:bg-neutral-700 dark:after:bg-neutral-200" />
+          </label>
+        </div>
+      </UCard>
       <UCard class="lg:col-span-2">
         <template #header><h2 class="font-medium">Dieses Gerät</h2></template>
         <div class="space-y-4 text-sm">

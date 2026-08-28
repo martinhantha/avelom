@@ -38,6 +38,7 @@ const appointmentSelect = {
   parseSnapshot: true,
   version: true,
   createdAt: true,
+  createdByUserId: true,
   updatedAt: true,
   lessonType: { select: { id: true, name: true, defaultDurationMin: true } },
   teacher: { select: { id: true, displayName: true } },
@@ -571,7 +572,11 @@ export async function getAppointment(tenantId: string, appointmentIdInput: strin
   return toAppointmentDto(row);
 }
 
-export async function createAppointment(tenantId: string, rawBody: unknown) {
+export async function createAppointment(
+  tenantId: string,
+  rawBody: unknown,
+  createdByUserId?: string | null,
+) {
   const body = (rawBody ?? {}) as Record<string, unknown>;
   const startsAt = parseRequiredDate(body.startsAt, "startsAt");
   const endsAt = parseRequiredDate(body.endsAt, "endsAt");
@@ -597,6 +602,7 @@ export async function createAppointment(tenantId: string, rawBody: unknown) {
       teacherId,
       resourceId,
       customerId,
+      createdByUserId: createdByUserId || null,
       appointmentContactText: optionalTrimmedString(body.appointmentContactText),
       appointmentPhoneRaw: optionalTrimmedString(body.appointmentPhoneRaw),
       appointmentPhoneE164: optionalTrimmedString(body.appointmentPhoneE164),

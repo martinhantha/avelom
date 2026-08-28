@@ -1,4 +1,5 @@
 import type { AppointmentLiveEvent, AppointmentLiveEventType } from "~/types/live-events";
+import { prisma } from "~/server/utils/prisma";
 
 type Listener = (event: AppointmentLiveEvent) => void;
 
@@ -17,25 +18,37 @@ export function appointmentEventTitle(appointment: {
   );
 }
 
-export function toAppointmentLiveEvent(
+export async function toAppointmentLiveEvent(
   type: AppointmentLiveEventType,
   tenantId: string,
   actorUserId: string,
   appointment: {
     id: string;
     startsAt: string;
+    createdByUserId?: string | null;
     appointmentContactText?: string | null;
     teacher?: { id: string; displayName: string } | null;
     customer?: { displayName?: string | null } | null;
     lessonType?: { name?: string | null } | null;
   },
   extra?: { previousStartsAt?: string | null },
-): AppointmentLiveEvent {
+): Promise<AppointmentLiveEvent> {
+  let teacherUserId: string | null = null;
+  if (appointment.teacher?.id) {
+    const profile = await prisma.teacherProfile.findFirst({
+      where: { id: appointment.teacher.id, deletedAt: null },
+      select: { membership: { select: { userId: true } } },
+    });
+    teacherUserId = profile?.membership?.userId ?? null;
+  }
+
   return {
     type,
     tenantId,
     appointmentId: appointment.id,
     actorUserId,
+    createdByUserId: appointment.createdByUserId ?? null,
+    teacherUserId,
     title: appointmentEventTitle(appointment),
     startsAt: appointment.startsAt,
     previousStartsAt: extra?.previousStartsAt ?? null,
@@ -58,6 +71,24 @@ export function publishAppointmentLive(event: AppointmentLiveEvent) {
 
 export function publishAppointmentCreated(event: AppointmentLiveEvent) {
   publishAppointmentLive(event);
+}
+
+export function shouldReceiveAppointmentLive(
+  viewerUserId: string,
+  event: AppointmentLiveEvent,
+): boolean {
+  if (event.actorUserId === viewerUserId) return true;
+
+  const isAssignedTeacher = Boolean(event.teacherUserId && event.teacherUserId === viewerUserId);
+  const isCreator = Boolean(event.createdByUserId && event.createdByUserId === viewerUserId);
+
+  if (event.type === "appointment.created") {
+    return isAssignedTeacher;
+  }
+  if (event.type === "appointment.moved" || event.type === "appointment.deleted") {
+    return isAssignedTeacher || isCreator;
+  }
+  return false;
 }
 
 export function subscribeAppointmentEvents(tenantId: string, listener: Listener): () => void {

@@ -20,7 +20,7 @@ interface AppointmentListItem {
   startsAt: string;
   status: string;
   appointmentContactText: string | null;
-  teacher: { displayName: string } | null;
+  teacher: { id: string; displayName: string } | null;
   customer: { displayName: string | null } | null;
 }
 
@@ -128,6 +128,8 @@ export function useAppointmentReminders() {
 
     for (const item of items) {
       if (item.status === "cancelled" || item.status === "completed") continue;
+      const myTeacherId = primaryTenant.value?.teacherProfileId;
+      if (!myTeacherId || item.teacher?.id !== myTeacherId) continue;
       const start = new Date(item.startsAt).getTime();
       if (!Number.isFinite(start) || start <= now) continue;
       if (shownIds.value.has(item.id)) continue;

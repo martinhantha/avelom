@@ -3,6 +3,7 @@ export interface AuthUser {
   email: string;
   name: string | null;
   isSuperadmin: boolean;
+  nextDayBriefingEnabled: boolean;
 }
 
 export interface AuthMembership {
@@ -14,6 +15,7 @@ export interface AuthMembership {
   teacherLabel: string;
   resourcesEnabled: boolean;
   speechRecognitionEnabled: boolean;
+  teacherProfileId: string | null;
 }
 
 export interface AuthSession {

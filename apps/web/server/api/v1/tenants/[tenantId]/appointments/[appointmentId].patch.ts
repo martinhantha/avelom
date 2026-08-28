@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
 
   if (existing.startsAt !== updated.startsAt || existing.endsAt !== updated.endsAt) {
     publishAppointmentLive(
-      toAppointmentLiveEvent("appointment.moved", access.tenant.id, access.actorUserId, updated, {
+      await toAppointmentLiveEvent("appointment.moved", access.tenant.id, access.actorUserId, updated, {
         previousStartsAt: existing.startsAt,
       }),
     );

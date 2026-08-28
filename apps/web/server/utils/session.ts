@@ -19,6 +19,7 @@ export async function loadUserWithMemberships(userId: string) {
               speechRecognitionEnabled: true,
             },
           },
+          teacherProfile: { select: { id: true, deletedAt: true } },
         },
       },
     },
@@ -32,6 +33,7 @@ export function toAuthSession(user: NonNullable<Awaited<ReturnType<typeof loadUs
       email: user.email,
       name: user.name,
       isSuperadmin: user.isSuperadmin,
+      nextDayBriefingEnabled: user.nextDayBriefingEnabled,
     },
     memberships: user.memberships.map((m) => ({
       tenantId: m.tenantId,
@@ -42,6 +44,7 @@ export function toAuthSession(user: NonNullable<Awaited<ReturnType<typeof loadUs
       teacherLabel: m.tenant.teacherLabel?.trim() || "Lehrer",
       resourcesEnabled: m.tenant.resourcesEnabled,
       speechRecognitionEnabled: m.tenant.speechRecognitionEnabled,
+      teacherProfileId: m.teacherProfile?.deletedAt ? null : m.teacherProfile?.id ?? null,
     })),
   };
 }

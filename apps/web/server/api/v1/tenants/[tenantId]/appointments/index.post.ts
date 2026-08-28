@@ -16,10 +16,10 @@ export default defineEventHandler(async (event) => {
     body.teacherId = scope.forceTeacherId;
   }
 
-  const appointment = await createAppointment(access.tenant.id, body);
+  const appointment = await createAppointment(access.tenant.id, body, access.actorUserId);
 
   publishAppointmentLive(
-    toAppointmentLiveEvent("appointment.created", access.tenant.id, access.actorUserId, appointment),
+    await toAppointmentLiveEvent("appointment.created", access.tenant.id, access.actorUserId, appointment),
   );
 
   setResponseStatus(event, 201);

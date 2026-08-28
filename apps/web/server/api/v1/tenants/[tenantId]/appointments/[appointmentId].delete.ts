@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   await softDeleteAppointment(access.tenant.id, appointmentId, access.actorUserId);
 
   publishAppointmentLive(
-    toAppointmentLiveEvent("appointment.deleted", access.tenant.id, access.actorUserId, existing),
+    await toAppointmentLiveEvent("appointment.deleted", access.tenant.id, access.actorUserId, existing),
   );
 
   setResponseStatus(event, 204);
