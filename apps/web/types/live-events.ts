@@ -1,12 +1,22 @@
-export const APPOINTMENT_CREATED_EVENT = "avelom:appointment-created";
+export const APPOINTMENT_LIVE_EVENT = "avelom:appointment-live";
+/** @deprecated Use APPOINTMENT_LIVE_EVENT */
+export const APPOINTMENT_CREATED_EVENT = APPOINTMENT_LIVE_EVENT;
 
-export interface AppointmentCreatedLiveEvent {
-  type: "appointment.created";
+export type AppointmentLiveEventType =
+  | "appointment.created"
+  | "appointment.moved"
+  | "appointment.deleted";
+
+export interface AppointmentLiveEvent {
+  type: AppointmentLiveEventType;
   tenantId: string;
   appointmentId: string;
-  createdByUserId: string;
+  actorUserId: string;
   title: string;
   startsAt: string;
+  previousStartsAt?: string | null;
   teacherName: string | null;
   teacherId: string | null;
 }
+
+export type AppointmentCreatedLiveEvent = AppointmentLiveEvent;

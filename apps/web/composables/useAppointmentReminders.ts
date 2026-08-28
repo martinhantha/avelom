@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { AvelomDevice } from "@avelom/capacitor-call-hints";
-import { APPOINTMENT_CREATED_EVENT } from "~/types/live-events";
+import { APPOINTMENT_LIVE_EVENT } from "~/types/live-events";
 import { resolveAppointmentDisplayName } from "~/utils/appointment-contact";
 
 const LEAD_MS = 15 * 60 * 1000;
@@ -199,14 +199,14 @@ export function useAppointmentReminders() {
     pollTimer = setInterval(() => {
       void refresh();
     }, POLL_MS);
-    window.addEventListener(APPOINTMENT_CREATED_EVENT, onCreated);
+    window.addEventListener(APPOINTMENT_LIVE_EVENT, onCreated);
     document.addEventListener("visibilitychange", onVisible);
   });
 
   onUnmounted(() => {
     if (pollTimer) clearInterval(pollTimer);
     clearTimers();
-    window.removeEventListener(APPOINTMENT_CREATED_EVENT, onCreated);
+    window.removeEventListener(APPOINTMENT_LIVE_EVENT, onCreated);
     document.removeEventListener("visibilitychange", onVisible);
   });
 

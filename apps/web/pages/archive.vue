@@ -259,6 +259,8 @@ watch(pageSize, () => {
 
 onMounted(loadArchive);
 
+useAppointmentListSync(loadArchive);
+
 watch(
   () => primaryTenant.value?.tenantId,
   () => {

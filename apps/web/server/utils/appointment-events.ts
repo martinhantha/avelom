@@ -1,10 +1,50 @@
-import type { AppointmentCreatedLiveEvent } from "~/types/live-events";
+import type { AppointmentLiveEvent, AppointmentLiveEventType } from "~/types/live-events";
 
-type Listener = (event: AppointmentCreatedLiveEvent) => void;
+type Listener = (event: AppointmentLiveEvent) => void;
 
 const listeners = new Map<string, Set<Listener>>();
 
-export function publishAppointmentCreated(event: AppointmentCreatedLiveEvent) {
+export function appointmentEventTitle(appointment: {
+  customer?: { displayName?: string | null } | null;
+  appointmentContactText?: string | null;
+  lessonType?: { name?: string | null } | null;
+}): string {
+  return (
+    appointment.customer?.displayName ||
+    appointment.appointmentContactText ||
+    appointment.lessonType?.name ||
+    "Termin"
+  );
+}
+
+export function toAppointmentLiveEvent(
+  type: AppointmentLiveEventType,
+  tenantId: string,
+  actorUserId: string,
+  appointment: {
+    id: string;
+    startsAt: string;
+    appointmentContactText?: string | null;
+    teacher?: { id: string; displayName: string } | null;
+    customer?: { displayName?: string | null } | null;
+    lessonType?: { name?: string | null } | null;
+  },
+  extra?: { previousStartsAt?: string | null },
+): AppointmentLiveEvent {
+  return {
+    type,
+    tenantId,
+    appointmentId: appointment.id,
+    actorUserId,
+    title: appointmentEventTitle(appointment),
+    startsAt: appointment.startsAt,
+    previousStartsAt: extra?.previousStartsAt ?? null,
+    teacherName: appointment.teacher?.displayName ?? null,
+    teacherId: appointment.teacher?.id ?? null,
+  };
+}
+
+export function publishAppointmentLive(event: AppointmentLiveEvent) {
   const tenantListeners = listeners.get(event.tenantId);
   if (!tenantListeners?.size) return;
   for (const listener of tenantListeners) {
@@ -14,6 +54,10 @@ export function publishAppointmentCreated(event: AppointmentCreatedLiveEvent) {
       // A broken subscriber must not block the others.
     }
   }
+}
+
+export function publishAppointmentCreated(event: AppointmentLiveEvent) {
+  publishAppointmentLive(event);
 }
 
 export function subscribeAppointmentEvents(tenantId: string, listener: Listener): () => void {

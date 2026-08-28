@@ -1,29 +1,76 @@
 import { Capacitor } from "@capacitor/core";
 import { AvelomDevice } from "@avelom/capacitor-call-hints";
 import {
-  APPOINTMENT_CREATED_EVENT,
-  type AppointmentCreatedLiveEvent,
+  APPOINTMENT_LIVE_EVENT,
+  type AppointmentLiveEvent,
+  type AppointmentLiveEventType,
 } from "~/types/live-events";
 
 let askedPushPermission = false;
 
-function isCreatedEvent(value: unknown): value is AppointmentCreatedLiveEvent {
+const LIVE_TYPES = new Set<AppointmentLiveEventType>([
+  "appointment.created",
+  "appointment.moved",
+  "appointment.deleted",
+]);
+
+function isLiveEvent(value: unknown): value is AppointmentLiveEvent {
   if (!value || typeof value !== "object") return false;
-  const event = value as Partial<AppointmentCreatedLiveEvent>;
-  return event.type === "appointment.created" && typeof event.appointmentId === "string";
+  const event = value as Partial<AppointmentLiveEvent>;
+  return (
+    typeof event.type === "string" &&
+    LIVE_TYPES.has(event.type as AppointmentLiveEventType) &&
+    typeof event.appointmentId === "string"
+  );
 }
 
 function browserCanAskNotifications() {
   return typeof Notification !== "undefined" && Notification.permission === "default";
 }
 
-async function notifyOs(event: AppointmentCreatedLiveEvent, body: string) {
+function alertCopy(event: AppointmentLiveEvent): { title: string; body: string } {
+  const when = new Intl.DateTimeFormat("de-DE", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(event.startsAt));
+
+  if (event.type === "appointment.moved") {
+    const previous = event.previousStartsAt
+      ? new Intl.DateTimeFormat("de-DE", {
+          weekday: "short",
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date(event.previousStartsAt))
+      : "";
+    return {
+      title: "Termin verschoben",
+      body: [event.title, previous ? `${previous} → ${when}` : when].filter(Boolean).join(" · "),
+    };
+  }
+  if (event.type === "appointment.deleted") {
+    return {
+      title: "Termin gelöscht",
+      body: [event.title, when].filter(Boolean).join(" · "),
+    };
+  }
+  return {
+    title: "Neuer Termin",
+    body: [event.title, when].filter(Boolean).join(" · "),
+  };
+}
+
+async function notifyOs(event: AppointmentLiveEvent, title: string, body: string) {
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
     try {
       await AvelomDevice.showLocalNotification({
-        title: "Neuer Termin",
+        title,
         body,
-        id: event.appointmentId,
+        id: `${event.type}:${event.appointmentId}`,
       });
       return;
     } catch {
@@ -33,7 +80,7 @@ async function notifyOs(event: AppointmentCreatedLiveEvent, body: string) {
 
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   try {
-    new Notification("Neuer Termin", { body, tag: event.appointmentId });
+    new Notification(title, { body, tag: `${event.type}:${event.appointmentId}` });
   } catch {
     // Some WebViews reject Notification construction even after permission.
   }
@@ -42,7 +89,7 @@ async function notifyOs(event: AppointmentCreatedLiveEvent, body: string) {
 export function useAppointmentAlerts() {
   const { user, primaryTenant } = useAuth();
   const { device } = useDeviceCapabilities();
-  const alert = ref<AppointmentCreatedLiveEvent | null>(null);
+  const alert = ref<AppointmentLiveEvent | null>(null);
   const canAskNotifications = ref(false);
 
   let source: EventSource | null = null;
@@ -81,30 +128,24 @@ export function useAppointmentAlerts() {
     canAskNotifications.value = browserCanAskNotifications();
   }
 
-  function show(event: AppointmentCreatedLiveEvent) {
-    window.dispatchEvent(new CustomEvent(APPOINTMENT_CREATED_EVENT, { detail: event }));
+  function show(event: AppointmentLiveEvent) {
+    window.dispatchEvent(new CustomEvent(APPOINTMENT_LIVE_EVENT, { detail: event }));
 
-    const ownFocusedTab = event.createdByUserId === user.value?.id && document.hasFocus();
+    const actorId = event.actorUserId;
+    const ownFocusedTab = actorId === user.value?.id && document.hasFocus();
     if (ownFocusedTab) return;
 
     alert.value = event;
     canAskNotifications.value = browserCanAskNotifications();
     if (hideTimer) clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
-      if (alert.value?.appointmentId === event.appointmentId) {
+      if (alert.value?.appointmentId === event.appointmentId && alert.value?.type === event.type) {
         alert.value = null;
       }
     }, 12_000);
 
-    const when = new Intl.DateTimeFormat("de-DE", {
-      weekday: "short",
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(event.startsAt));
-    const body = [event.title, when].filter(Boolean).join(" · ");
-    void notifyOs(event, body);
+    const copy = alertCopy(event);
+    void notifyOs(event, copy.title, copy.body);
   }
 
   function connect() {
@@ -117,7 +158,7 @@ export function useAppointmentAlerts() {
     source.onmessage = (message) => {
       try {
         const payload: unknown = JSON.parse(message.data);
-        if (isCreatedEvent(payload)) show(payload);
+        if (isLiveEvent(payload)) show(payload);
       } catch {
         // Ignore keep-alives and malformed frames.
       }
@@ -144,15 +185,15 @@ export function useAppointmentAlerts() {
 }
 
 export function useAppointmentListSync(reload: () => void | Promise<void>) {
-  function onCreated() {
+  function onLive() {
     void reload();
   }
 
   onMounted(() => {
-    window.addEventListener(APPOINTMENT_CREATED_EVENT, onCreated);
+    window.addEventListener(APPOINTMENT_LIVE_EVENT, onLive);
   });
 
   onUnmounted(() => {
-    window.removeEventListener(APPOINTMENT_CREATED_EVENT, onCreated);
+    window.removeEventListener(APPOINTMENT_LIVE_EVENT, onLive);
   });
 }

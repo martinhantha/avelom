@@ -1,6 +1,6 @@
 import { getRouterParam, readBody, setResponseStatus } from "h3";
 import { requireTenantAccess } from "~/server/utils/authz";
-import { publishAppointmentCreated } from "~/server/utils/appointment-events";
+import { publishAppointmentLive, toAppointmentLiveEvent } from "~/server/utils/appointment-events";
 import { createAppointment } from "~/server/utils/scheduling";
 
 export default defineEventHandler(async (event) => {
@@ -8,20 +8,9 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const appointment = await createAppointment(access.tenant.id, body);
 
-  publishAppointmentCreated({
-    type: "appointment.created",
-    tenantId: access.tenant.id,
-    appointmentId: appointment.id,
-    createdByUserId: access.actorUserId,
-    title:
-      appointment.customer?.displayName ||
-      appointment.appointmentContactText ||
-      appointment.lessonType?.name ||
-      "Neuer Termin",
-    startsAt: appointment.startsAt,
-    teacherName: appointment.teacher?.displayName ?? null,
-    teacherId: appointment.teacher?.id ?? null,
-  });
+  publishAppointmentLive(
+    toAppointmentLiveEvent("appointment.created", access.tenant.id, access.actorUserId, appointment),
+  );
 
   setResponseStatus(event, 201);
   return appointment;
