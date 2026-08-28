@@ -1,5 +1,5 @@
 import { getRouterParam, readBody } from "h3";
-import { requireTenantAccess } from "~/server/utils/authz";
+import { requireTenantAccess, staffAppointmentScope } from "~/server/utils/authz";
 import { prisma } from "~/server/utils/prisma";
 import { throwValidation } from "~/server/utils/api-errors";
 import { parseAppointmentIntent } from "~/server/utils/parse-intent";
@@ -16,9 +16,16 @@ export default defineEventHandler(async (event) => {
     throwValidation("Text ist erforderlich", { field: "text" });
   }
 
+  const scope = await staffAppointmentScope(access);
+
   const [teachers, resources, lessonTypes, customers, tenant] = await Promise.all([
     prisma.teacherProfile.findMany({
-      where: { tenantId: access.tenant.id, deletedAt: null, membership: { deletedAt: null } },
+      where: {
+        tenantId: access.tenant.id,
+        deletedAt: null,
+        membership: { deletedAt: null },
+        ...(scope.forceTeacherId ? { id: scope.forceTeacherId } : {}),
+      },
       select: { id: true, displayName: true },
       orderBy: { displayName: "asc" },
     }),
@@ -68,10 +75,17 @@ export default defineEventHandler(async (event) => {
     body.answers && typeof body.answers === "object" ? body.answers : {},
   );
 
+  if (scope.forceTeacherId) {
+    const ownTeacher = teachers.find((teacher) => teacher.id === scope.forceTeacherId);
+    result.parsed.teacherId = scope.forceTeacherId;
+    result.parsed.teacherName = ownTeacher?.displayName;
+    result.fieldConfidence.teacherId = 1;
+  }
+
   if (!result.parsed.time) {
     const lessonType = lessonTypes.find((item) => item.id === result.parsed.lessonTypeId);
     const slot = await suggestNextPrioritySlot(access.tenant.id, {
-      teacherId: result.parsed.teacherId,
+      teacherId: result.parsed.teacherId ?? scope.forceTeacherId ?? undefined,
       resourceId: result.parsed.resourceId,
       durationMin: result.parsed.durationMinutes ?? lessonType?.defaultDurationMin ?? 60,
       onDate: result.parsed.date,

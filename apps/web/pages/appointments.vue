@@ -486,7 +486,7 @@ watch(
           />
         </UButton>
         <UButton
-          v-if="canManageTenant && speechRecognitionEnabled"
+          v-if="canAccessWorkspace && speechRecognitionEnabled"
           variant="outline"
           color="neutral"
           icon="i-lucide-message-circle-question"
@@ -497,7 +497,7 @@ watch(
           <span class="hidden sm:inline">Assistent</span>
         </UButton>
         <UButton
-          v-if="canManageTenant"
+          v-if="canAccessWorkspace"
           icon="i-lucide-plus"
           color="primary"
           aria-label="Neuer Termin"

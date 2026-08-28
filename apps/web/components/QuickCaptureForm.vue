@@ -378,7 +378,11 @@ function applyParsed(
   if (parsed.date && (!isEditing.value || !slotSuggested)) form.date = parsed.date;
   if (parsed.time && (!isEditing.value || !slotSuggested)) form.time = parsed.time;
   if (parsed.durationMinutes) form.durationMinutes = parsed.durationMinutes;
-  if (parsed.teacherId && (!isEditing.value || !slotSuggested || !form.teacherId)) {
+  if (
+    canManageTenant.value &&
+    parsed.teacherId &&
+    (!isEditing.value || !slotSuggested || !form.teacherId)
+  ) {
     form.teacherId = parsed.teacherId;
   }
   if (parsed.resourceId) form.resourceId = parsed.resourceId;
@@ -768,10 +772,6 @@ watch(
 
 async function saveAppointment() {
   if (!primaryTenant.value || !canSave.value) return;
-  if (!isEditing.value && !canManageTenant.value) {
-    error.value = "Neue Termine kann nur ein Admin anlegen";
-    return;
-  }
 
   const startsAt = localDateTime(form.date, form.time);
   const endsAt = new Date(startsAt.getTime() + effectiveDuration.value * 60_000);

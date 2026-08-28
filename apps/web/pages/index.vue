@@ -404,7 +404,7 @@ async function deleteAppointment(appointment: AppointmentListItem) {
         Archiv
       </UButton>
       <UButton
-        v-if="canManageTenant"
+        v-if="canAccessWorkspace"
         block
         size="xl"
         color="primary"
