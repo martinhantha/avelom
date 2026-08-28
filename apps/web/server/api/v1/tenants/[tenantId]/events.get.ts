@@ -1,4 +1,4 @@
-import { getRouterParam, setHeader } from "h3";
+import { getRouterParam, setHeader, setResponseStatus } from "h3";
 import { requireTenantAccess } from "~/server/utils/authz";
 import { shouldReceiveAppointmentLive, subscribeAppointmentEvents } from "~/server/utils/appointment-events";
 
@@ -9,51 +9,37 @@ export default defineEventHandler(async (event) => {
   setHeader(event, "Cache-Control", "no-cache, no-transform");
   setHeader(event, "Connection", "keep-alive");
   setHeader(event, "X-Accel-Buffering", "no");
+  setResponseStatus(event, 200);
 
-  const encoder = new TextEncoder();
-  let ping: ReturnType<typeof setInterval> | undefined;
-  let unsubscribe: (() => void) | undefined;
+  const res = event.node.res;
+  res.flushHeaders?.();
 
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const write = (chunk: string) => {
-        try {
-          controller.enqueue(encoder.encode(chunk));
-        } catch {
-          cleanup();
-        }
-      };
+  const write = (chunk: string) => {
+    if (res.writableEnded) return;
+    res.write(chunk);
+    (res as { flush?: () => void }).flush?.();
+  };
 
-      const cleanup = () => {
-        if (ping) {
-          clearInterval(ping);
-          ping = undefined;
-        }
-        unsubscribe?.();
-        unsubscribe = undefined;
-        try {
-          controller.close();
-        } catch {
-          // Already closed.
-        }
-      };
+  write("retry: 3000\n\n");
+  write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
 
-      write("retry: 3000\n\n");
-      write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
-      unsubscribe = subscribeAppointmentEvents(access.tenant.id, (payload) => {
-        if (!shouldReceiveAppointmentLive(access.actorUserId, payload)) {
-          return;
-        }
-        write(`data: ${JSON.stringify(payload)}\n\n`);
-      });
-      ping = setInterval(() => write(": ping\n\n"), 20_000);
-      event.node.req.on("close", cleanup);
-    },
-    cancel() {
-      if (ping) clearInterval(ping);
-      unsubscribe?.();
-    },
+  const unsubscribe = subscribeAppointmentEvents(access.tenant.id, (payload) => {
+    if (!shouldReceiveAppointmentLive(access.actorUserId, payload)) {
+      return;
+    }
+    write(`data: ${JSON.stringify(payload)}\n\n`);
   });
 
-  return stream;
+  const ping = setInterval(() => write(": ping\n\n"), 20_000);
+
+  await new Promise<void>((resolve) => {
+    const cleanup = () => {
+      clearInterval(ping);
+      unsubscribe();
+      resolve();
+    };
+    event.node.req.once("close", cleanup);
+    event.node.req.once("end", cleanup);
+    event.node.req.once("error", cleanup);
+  });
 });
