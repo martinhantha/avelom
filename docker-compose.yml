@@ -34,6 +34,10 @@ services:
       DATABASE_URL: postgresql://avelom:${POSTGRES_PASSWORD:-avelom_dev_change_me}@postgres:5432/avelom?schema=public
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-16-chars}
       REDIS_URL: redis://redis:6379
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
     ports:
       - "3000:3000"
     depends_on:
