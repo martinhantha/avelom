@@ -53,6 +53,7 @@ const canEdit = canManageTenant;
 const tenantSettingsSaving = ref(false);
 const useDefaultDurationLocal = ref(true);
 const resourcesEnabledLocal = ref(true);
+const speechRecognitionEnabledLocal = ref(false);
 const teacherLabelLocal = ref("Lehrer");
 const defaultTeacherIdLocal = ref("");
 const lastSavedDefaultTeacherId = ref("");
@@ -73,6 +74,13 @@ watch(
   { immediate: true },
 );
 watch(
+  () => primaryTenant.value?.speechRecognitionEnabled,
+  (v) => {
+    speechRecognitionEnabledLocal.value = v ?? false;
+  },
+  { immediate: true },
+);
+watch(
   () => primaryTenant.value?.teacherLabel,
   (v) => {
     teacherLabelLocal.value = v?.trim() || "Lehrer";
@@ -86,6 +94,7 @@ async function saveTenantSettings(patch: {
   defaultLessonTypeId?: string | null;
   teacherLabel?: string;
   resourcesEnabled?: boolean;
+  speechRecognitionEnabled?: boolean;
 }) {
   if (!primaryTenant.value?.tenantId) return;
   tenantSettingsSaving.value = true;
@@ -96,6 +105,7 @@ async function saveTenantSettings(patch: {
       defaultLessonTypeId: string | null;
       teacherLabel: string;
       resourcesEnabled: boolean;
+      speechRecognitionEnabled: boolean;
     }>(`/api/v1/tenants/${primaryTenant.value.tenantId}/settings`, {
       method: "PATCH",
       credentials: "include",
@@ -106,6 +116,9 @@ async function saveTenantSettings(patch: {
     }
     if (typeof saved.resourcesEnabled === "boolean") {
       resourcesEnabledLocal.value = saved.resourcesEnabled;
+    }
+    if (typeof saved.speechRecognitionEnabled === "boolean") {
+      speechRecognitionEnabledLocal.value = saved.speechRecognitionEnabled;
     }
     if (typeof saved.teacherLabel === "string") {
       teacherLabelLocal.value = saved.teacherLabel;
@@ -125,6 +138,7 @@ async function saveTenantSettings(patch: {
     setError(err.data?.data?.message || err.data?.message || err.statusMessage || "Speichern fehlgeschlagen");
     useDefaultDurationLocal.value = primaryTenant.value?.useDefaultDuration ?? true;
     resourcesEnabledLocal.value = primaryTenant.value?.resourcesEnabled ?? true;
+    speechRecognitionEnabledLocal.value = primaryTenant.value?.speechRecognitionEnabled ?? false;
     teacherLabelLocal.value = primaryTenant.value?.teacherLabel?.trim() || "Lehrer";
     defaultTeacherIdLocal.value = lastSavedDefaultTeacherId.value;
     defaultLessonTypeIdLocal.value = lastSavedDefaultLessonTypeId.value;
@@ -776,6 +790,30 @@ onMounted(() => {
                 () => {
                   resourcesEnabledLocal = !resourcesEnabledLocal;
                   saveTenantSettings({ resourcesEnabled: resourcesEnabledLocal });
+                }
+              "
+            />
+            <div class="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 dark:bg-neutral-700 dark:after:bg-neutral-200" />
+          </label>
+        </div>
+
+        <div class="flex items-start justify-between gap-4 mt-6 pt-4 border-t border-neutral-200 dark:border-neutral-800">
+          <div class="text-sm">
+            <p class="font-medium">Spracherkennung</p>
+            <p class="text-xs text-neutral-500 mt-1">
+              Standardmäßig aus. Wenn aktiviert, startet die Spracheingabe in der Schnellerfassung automatisch.
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+            <input
+              type="checkbox"
+              class="sr-only peer"
+              :checked="speechRecognitionEnabledLocal"
+              :disabled="!canEdit || tenantSettingsSaving"
+              @change="
+                () => {
+                  speechRecognitionEnabledLocal = !speechRecognitionEnabledLocal;
+                  saveTenantSettings({ speechRecognitionEnabled: speechRecognitionEnabledLocal });
                 }
               "
             />

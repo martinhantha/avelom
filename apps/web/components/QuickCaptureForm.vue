@@ -101,6 +101,9 @@ const teacherLabel = computed(
 const resourcesEnabled = computed(
   () => options.value?.resourcesEnabled ?? primaryTenant.value?.resourcesEnabled ?? true,
 );
+const speechRecognitionEnabled = computed(
+  () => primaryTenant.value?.speechRecognitionEnabled ?? false,
+);
 
 const isEditing = computed(() => Boolean(props.appointment?.id));
 const text = ref(props.appointment?.appointmentContactText ?? props.initialContactText ?? "");
@@ -347,6 +350,10 @@ async function toggleSpeech() {
 }
 
 function toggleVoiceAssistant() {
+  if (!speechRecognitionEnabled.value) {
+    void parseFromText();
+    return;
+  }
   speechError.value = "";
   parseHint.value = "";
   if (!speechSupported.value && !recognition) {
@@ -849,10 +856,12 @@ async function saveAppointment() {
 }
 
 onMounted(() => {
-  setupSpeech();
+  if (speechRecognitionEnabled.value) {
+    setupSpeech();
+  }
   loadOptions();
   void loadCallHints();
-  if (props.startWithVoice) {
+  if (speechRecognitionEnabled.value && props.startWithVoice) {
     window.setTimeout(() => toggleVoiceAssistant(), 250);
   }
 });
@@ -886,7 +895,10 @@ onMounted(() => {
       :description="conflictType ? `${error} (${conflictType})` : error"
     />
 
-    <div class="rounded-lg border border-primary-200 dark:border-primary-900 bg-primary-50/70 dark:bg-primary-950/30 p-3 space-y-3">
+    <div
+      v-if="speechRecognitionEnabled"
+      class="rounded-lg border border-primary-200 dark:border-primary-900 bg-primary-50/70 dark:bg-primary-950/30 p-3 space-y-3"
+    >
       <div class="flex flex-wrap gap-2">
         <UButton
           type="button"
@@ -955,7 +967,7 @@ onMounted(() => {
     <UFormField
       label="Kontakt oder Notiz"
       required
-      :hint="speechSupported ? 'Oder nur diktieren – der Sprachassistent füllt die Felder.' : undefined"
+      :hint="speechRecognitionEnabled && speechSupported ? 'Oder nur diktieren – der Sprachassistent füllt die Felder.' : undefined"
     >
       <div class="relative">
         <UTextarea
@@ -966,7 +978,7 @@ onMounted(() => {
           class="w-full pr-12"
         />
         <UButton
-          v-if="speechSupported"
+          v-if="speechRecognitionEnabled && speechSupported"
           type="button"
           size="sm"
           :color="speechListening ? 'error' : 'primary'"
@@ -995,7 +1007,7 @@ onMounted(() => {
       @close="speechError = ''"
     />
     <UAlert
-      v-if="!speechSupported"
+      v-if="speechRecognitionEnabled && !speechSupported"
       color="neutral"
       variant="subtle"
       icon="i-lucide-info"

@@ -13,6 +13,7 @@ export interface AuthMembership {
   useDefaultDuration: boolean;
   teacherLabel: string;
   resourcesEnabled: boolean;
+  speechRecognitionEnabled: boolean;
 }
 
 export interface AuthSession {

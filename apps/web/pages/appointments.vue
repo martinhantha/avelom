@@ -33,7 +33,7 @@ interface SchedulingOptions {
   teachers: { id: string; displayName: string }[];
 }
 
-const { primaryTenant, teacherLabel, resourcesEnabled, canManageTenant, canAccessWorkspace } = useAuth();
+const { primaryTenant, teacherLabel, resourcesEnabled, speechRecognitionEnabled, canManageTenant, canAccessWorkspace } = useAuth();
 
 const appointments = ref<AppointmentListItem[]>([]);
 const pagination = ref<Pagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
@@ -308,7 +308,7 @@ function openQuickCapture() {
 function openAssistant() {
   editingAppointment.value = null;
   quickInitialContact.value = "";
-  quickStartVoice.value = true;
+  quickStartVoice.value = speechRecognitionEnabled.value;
   quickOpen.value = true;
 }
 
@@ -486,7 +486,7 @@ watch(
           />
         </UButton>
         <UButton
-          v-if="canManageTenant"
+          v-if="canManageTenant && speechRecognitionEnabled"
           variant="outline"
           color="neutral"
           icon="i-lucide-message-circle-question"

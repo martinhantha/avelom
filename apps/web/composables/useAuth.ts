@@ -8,6 +8,9 @@ export function useAuth() {
   const primaryTenant = computed(() => memberships.value[0] ?? null);
   const teacherLabel = computed(() => primaryTenant.value?.teacherLabel?.trim() || "Lehrer");
   const resourcesEnabled = computed(() => primaryTenant.value?.resourcesEnabled ?? true);
+  const speechRecognitionEnabled = computed(
+    () => primaryTenant.value?.speechRecognitionEnabled ?? false,
+  );
   const canManageTenant = computed(
     () => Boolean(user.value?.isSuperadmin || primaryTenant.value?.role === "ADMIN"),
   );
@@ -56,6 +59,7 @@ export function useAuth() {
     primaryTenant,
     teacherLabel,
     resourcesEnabled,
+    speechRecognitionEnabled,
     canManageTenant,
     canAccessWorkspace,
     login,

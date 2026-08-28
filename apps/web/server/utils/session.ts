@@ -16,6 +16,7 @@ export async function loadUserWithMemberships(userId: string) {
               useDefaultDuration: true,
               teacherLabel: true,
               resourcesEnabled: true,
+              speechRecognitionEnabled: true,
             },
           },
         },
@@ -40,6 +41,7 @@ export function toAuthSession(user: NonNullable<Awaited<ReturnType<typeof loadUs
       useDefaultDuration: m.tenant.useDefaultDuration,
       teacherLabel: m.tenant.teacherLabel?.trim() || "Lehrer",
       resourcesEnabled: m.tenant.resourcesEnabled,
+      speechRecognitionEnabled: m.tenant.speechRecognitionEnabled,
     })),
   };
 }

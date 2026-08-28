@@ -12,6 +12,7 @@ const TENANT_SETTINGS_SELECT = {
   defaultLessonTypeId: true,
   teacherLabel: true,
   resourcesEnabled: true,
+  speechRecognitionEnabled: true,
 } as const;
 
 function normalizeTeacherLabel(value: unknown): string {
@@ -34,6 +35,7 @@ export default defineEventHandler(async (event) => {
       defaultLessonTypeId?: string | null;
       teacherLabel?: string;
       resourcesEnabled?: boolean;
+      speechRecognitionEnabled?: boolean;
     }>(event)) ?? {};
 
   const data: {
@@ -42,12 +44,16 @@ export default defineEventHandler(async (event) => {
     defaultLessonTypeId?: string | null;
     teacherLabel?: string;
     resourcesEnabled?: boolean;
+    speechRecognitionEnabled?: boolean;
   } = {};
   if (typeof body.useDefaultDuration === "boolean") {
     data.useDefaultDuration = body.useDefaultDuration;
   }
   if (typeof body.resourcesEnabled === "boolean") {
     data.resourcesEnabled = body.resourcesEnabled;
+  }
+  if (typeof body.speechRecognitionEnabled === "boolean") {
+    data.speechRecognitionEnabled = body.speechRecognitionEnabled;
   }
   if (Object.prototype.hasOwnProperty.call(body, "teacherLabel")) {
     data.teacherLabel = normalizeTeacherLabel(body.teacherLabel);

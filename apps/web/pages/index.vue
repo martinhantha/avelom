@@ -24,7 +24,7 @@ interface AppointmentListItem {
   } | null;
 }
 
-const { user, primaryTenant, teacherLabel, resourcesEnabled, canManageTenant, canAccessWorkspace } =
+const { user, primaryTenant, teacherLabel, resourcesEnabled, speechRecognitionEnabled, canManageTenant, canAccessWorkspace } =
   useAuth();
 const isSuperadmin = computed(() => Boolean(user.value?.isSuperadmin));
 
@@ -304,7 +304,7 @@ watch(
 function openAssistant() {
   editingAppointment.value = null;
   quickInitialContact.value = "";
-  quickStartVoice.value = true;
+  quickStartVoice.value = speechRecognitionEnabled.value;
   quickOpen.value = true;
 }
 
@@ -411,7 +411,7 @@ async function deleteAppointment(appointment: AppointmentListItem) {
         icon="i-lucide-zap"
         @click="openAssistant"
       >
-        Schnellerfassung &amp; Assistent
+        {{ speechRecognitionEnabled ? "Schnellerfassung & Assistent" : "Schnellerfassung" }}
       </UButton>
       <UButton
         v-if="canManageTenant"
@@ -711,7 +711,7 @@ async function deleteAppointment(appointment: AppointmentListItem) {
             <p class="text-xs text-neutral-500">
               <template v-if="editingAppointment">Datum, Kontakt und Zuordnung anpassen und speichern.</template>
               <template v-else>
-                Per Sprache oder Text erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
+                Per <template v-if="speechRecognitionEnabled">Sprache oder </template>Text erfassen, {{ teacherLabel }}<template v-if="resourcesEnabled">/Ressource</template> zuordnen, speichern.
               </template>
             </p>
           </div>
