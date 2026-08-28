@@ -22,7 +22,7 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "stopSpeechRecognition", returnType: CAPPluginReturnPromise)
     ]
 
-    @objc func checkPermissions(_ call: CAPPluginCall) {
+    @objc override public func checkPermissions(_ call: CAPPluginCall) {
         call.resolve(permissionStatus())
     }
 

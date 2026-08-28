@@ -1,10 +1,8 @@
 import bcrypt from "bcryptjs";
 import type { AuthSession, AuthTokens } from "~/types/auth";
-import { signAccessToken, signRefreshToken, verifyBearerToken } from "./jwt";
+import { ACCESS_TTL_SEC, signAccessToken, signRefreshToken, verifyBearerToken } from "./jwt";
 import { loadUserWithMemberships, toAuthSession } from "./session";
 import { prisma } from "./prisma";
-
-const ACCESS_EXPIRES_SEC = 8 * 3600;
 
 export async function issueTokensForUser(userId: string): Promise<AuthTokens> {
   const [accessToken, refreshToken] = await Promise.all([
@@ -14,7 +12,7 @@ export async function issueTokensForUser(userId: string): Promise<AuthTokens> {
   return {
     accessToken,
     refreshToken,
-    expiresIn: ACCESS_EXPIRES_SEC,
+    expiresIn: ACCESS_TTL_SEC,
   };
 }
 

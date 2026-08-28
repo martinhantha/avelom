@@ -46,8 +46,10 @@ const config: CapacitorConfig = {
     allowMixedContent: Boolean(serverUrl?.startsWith("http://")),
   },
   plugins: {
+    // Remote server.url uses the WebView cookie jar for httpOnly auth cookies.
+    // CapacitorCookies patching can drop those sessions when the app is backgrounded.
     CapacitorCookies: {
-      enabled: true,
+      enabled: false,
     },
   },
 };

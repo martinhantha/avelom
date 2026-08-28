@@ -1,6 +1,7 @@
 import type { H3Event } from "h3";
 import type { AuthSession } from "~/types/auth";
-import { getCookie, getRequestHeader } from "h3";
+import { getRequestHeader } from "h3";
+import { restoreCookieSession } from "~/server/utils/auth-cookies";
 import { authSessionFromAccessToken } from "~/server/utils/auth-service";
 import { prisma } from "~/server/utils/prisma";
 import { throwApiError, throwNotFound } from "~/server/utils/api-errors";
@@ -14,14 +15,16 @@ function forbidden(message: string): never {
 }
 
 export async function requireSession(event: H3Event): Promise<AuthSession> {
-  const { authCookie } = useRuntimeConfig();
   const authorization = getRequestHeader(event, "authorization");
   const bearerToken = authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
-  const token = bearerToken ?? getCookie(event, authCookie ?? "avelom_at");
-  if (!token) unauthorized("Nicht angemeldet");
+  if (bearerToken) {
+    const session = await authSessionFromAccessToken(bearerToken);
+    if (!session) unauthorized("Sitzung ungültig");
+    return session;
+  }
 
-  const session = await authSessionFromAccessToken(token);
-  if (!session) unauthorized("Sitzung ungültig");
+  const session = await restoreCookieSession(event);
+  if (!session) unauthorized("Nicht angemeldet");
   return session;
 }
 

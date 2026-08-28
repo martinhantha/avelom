@@ -1,18 +1,9 @@
-import { authSessionFromAccessToken } from "~/server/utils/auth-service";
+import { restoreCookieSession } from "~/server/utils/auth-cookies";
 
 export default defineEventHandler(async (event) => {
-  const { authCookie } = useRuntimeConfig();
-  const name = authCookie ?? "avelom_at";
-  const token = getCookie(event, name);
-  if (!token) {
+  const session = await restoreCookieSession(event);
+  if (!session) {
     throw createError({ statusCode: 401, statusMessage: "Nicht angemeldet" });
   }
-
-  const session = await authSessionFromAccessToken(token);
-  if (!session) {
-    deleteCookie(event, name, { path: "/" });
-    throw createError({ statusCode: 401, statusMessage: "Sitzung ungültig" });
-  }
-
   return session;
 });

@@ -35,16 +35,7 @@ pnpm cap:open:android
 
 Nach dem ersten `cap add android` in `android/app/src/main/AndroidManifest.xml` nichts extra für Call-Log oder Mikrofon tun — das Plugin bringt `READ_CALL_LOG`, `RECORD_AUDIO` und `WRITE_CONTACTS` mit. Kontakte werden lokal unter dem Konto **Avelom** gespeichert (nicht Google).
 
-Nach `cap add ios` in `ios/App/App/Info.plist`:
-
-```xml
-<key>NSContactsUsageDescription</key>
-<string>Avelom speichert oder liest Kontakte nur, wenn du das ausdrücklich auslöst.</string>
-<key>NSMicrophoneUsageDescription</key>
-<string>Avelom nutzt das Mikrofon nur für die Sprachaufnahme in der Schnellerfassung.</string>
-<key>NSSpeechRecognitionUsageDescription</key>
-<string>Avelom wandelt deine Sprache in Text um, um Termine vorzubereiten.</string>
-```
+`pnpm cap:add:ios` und `pnpm cap:sync` schreiben die Privacy-Keys in `ios/App/App/Info.plist` (Kontakte, Mikrofon, Spracherkennung). Ohne `NSContactsUsageDescription` stürzt iOS beim Speichern eines Kontakts ab. Dieselben Commands setzen App-Icon und Splash aus `resources/icon.png`.
 
 ## Produktion
 

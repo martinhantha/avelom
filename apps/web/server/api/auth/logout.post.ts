@@ -1,6 +1,6 @@
+import { clearAuthCookies } from "~/server/utils/auth-cookies";
+
 export default defineEventHandler((event) => {
-  const { authCookie } = useRuntimeConfig();
-  const name = authCookie ?? "avelom_at";
-  deleteCookie(event, name, { path: "/" });
+  clearAuthCookies(event);
   return { ok: true as const };
 });

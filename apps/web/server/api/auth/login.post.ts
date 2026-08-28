@@ -1,3 +1,4 @@
+import { setAuthCookies } from "~/server/utils/auth-cookies";
 import { authSessionFromAccessToken, loginWithEmailPassword } from "~/server/utils/auth-service";
 
 function loginErrorMessage(code: "VALIDATION_ERROR" | "UNAUTHORIZED" | "DISABLED") {
@@ -20,17 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { tokens } = result;
-  const { authCookie } = useRuntimeConfig();
-  const name = authCookie ?? "avelom_at";
-  const maxAge = tokens.expiresIn ?? 8 * 3600;
-
-  setCookie(event, name, tokens.accessToken, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge,
-    secure: process.env.NODE_ENV === "production",
-  });
+  setAuthCookies(event, tokens);
 
   const session = await authSessionFromAccessToken(tokens.accessToken);
   if (!session) {

@@ -3,10 +3,10 @@
   "private": true,
   "description": "Capacitor native shell around the Avelom Nuxt app",
   "scripts": {
-    "cap:sync": "cap sync",
+    "cap:sync": "cap sync && node scripts/patch-ios-info-plist.mjs && node scripts/apply-ios-branding.mjs",
     "cap:copy": "cap copy",
     "cap:add:android": "cap add android",
-    "cap:add:ios": "cap add ios",
+    "cap:add:ios": "cap add ios && node scripts/patch-ios-info-plist.mjs && node scripts/apply-ios-branding.mjs",
     "cap:open:android": "cap open android",
     "cap:open:ios": "cap open ios"
   },
