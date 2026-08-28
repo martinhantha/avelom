@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import {
   assignedTeachersFromAppointment,
+  pushRecipientUserIds,
   shouldReceiveAppointmentLive,
 } from "../apps/web/utils/appointment-live-audience";
+import { formatTeachersForViewer } from "../apps/web/utils/appointment-contact";
 
 const staffUserId = "staff-user";
 const adminUserId = "admin-user";
@@ -24,6 +26,8 @@ assert.equal(shouldReceiveAppointmentLive(staffUserId, createdForStaff), true);
 assert.equal(shouldReceiveAppointmentLive(staffUserId, deletedForStaff), true);
 assert.equal(shouldReceiveAppointmentLive("other-user", createdForStaff), false);
 assert.equal(shouldReceiveAppointmentLive(adminUserId, createdForStaff), true);
+assert.deepEqual(pushRecipientUserIds(createdForStaff), [staffUserId]);
+assert.deepEqual(pushRecipientUserIds(deletedForStaff), [staffUserId]);
 
 assert.deepEqual(
   assignedTeachersFromAppointment({
@@ -50,6 +54,19 @@ assert.deepEqual(
     ],
   }).map((item) => item.id),
   ["t1", "t2"],
+);
+
+assert.equal(
+  formatTeachersForViewer(
+    {
+      teachers: [
+        { id: "t1", displayName: "Julian" },
+        { id: "t2", displayName: "Ally" },
+      ],
+    },
+    { teacherProfileId: "t1", canManageTenant: false },
+  ),
+  "Ally",
 );
 
 console.log("appointment-live-audience tests passed");

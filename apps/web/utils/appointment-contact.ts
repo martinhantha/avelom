@@ -31,6 +31,40 @@ export function formatAppointmentTeachers(appointment: {
   return appointment.teacher?.displayName ?? "";
 }
 
+export function formatTeachersForViewer(
+  appointment: {
+    teachers?: Array<{ id: string; displayName: string }> | null;
+    teacher?: { id: string; displayName: string } | null;
+  },
+  viewer: { teacherProfileId?: string | null; canManageTenant?: boolean },
+): string {
+  const all =
+    appointment.teachers?.length
+      ? appointment.teachers
+      : appointment.teacher
+        ? [appointment.teacher]
+        : [];
+  const visible = viewer.canManageTenant || !viewer.teacherProfileId
+    ? all
+    : all.filter((item) => item.id !== viewer.teacherProfileId);
+  return visible.map((item) => item.displayName).filter(Boolean).join(", ");
+}
+
+export function formatTeachersCaption(
+  appointment: {
+    teachers?: Array<{ id: string; displayName: string }> | null;
+    teacher?: { id: string; displayName: string } | null;
+  },
+  viewer: { teacherProfileId?: string | null; canManageTenant?: boolean; teacherLabel: string },
+): string {
+  const names = formatTeachersForViewer(appointment, viewer);
+  if (!names) return "";
+  if (viewer.canManageTenant || !viewer.teacherProfileId) {
+    return `${viewer.teacherLabel}: ${names}`;
+  }
+  return `Mit: ${names}`;
+}
+
 export function isAssignedTeacher(
   appointment: {
     teachers?: Array<{ id: string }> | null;

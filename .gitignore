@@ -12,3 +12,5 @@ prisma/migrations/**/migration_lock.toml
 tmp/
 apps/mobile-shell/android/
 apps/mobile-shell/ios/
+apps/mobile-shell/google-services.json
+google-services.json

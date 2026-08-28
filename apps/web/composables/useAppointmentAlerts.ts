@@ -5,6 +5,8 @@ import {
   type AppointmentLiveEvent,
   type AppointmentLiveEventType,
 } from "~/types/live-events";
+import { liveEventNotificationCopy } from "~/utils/appointment-live-audience";
+import { registerNativePushToken } from "~/utils/push-registration";
 
 let askedPushPermission = false;
 
@@ -29,39 +31,7 @@ function browserCanAskNotifications() {
 }
 
 function alertCopy(event: AppointmentLiveEvent): { title: string; body: string } {
-  const when = new Intl.DateTimeFormat("de-DE", {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(event.startsAt));
-
-  if (event.type === "appointment.moved") {
-    const previous = event.previousStartsAt
-      ? new Intl.DateTimeFormat("de-DE", {
-          weekday: "short",
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date(event.previousStartsAt))
-      : "";
-    return {
-      title: "Termin verschoben",
-      body: [event.title, previous ? `${previous} → ${when}` : when].filter(Boolean).join(" · "),
-    };
-  }
-  if (event.type === "appointment.deleted") {
-    return {
-      title: "Termin gelöscht",
-      body: [event.title, when].filter(Boolean).join(" · "),
-    };
-  }
-  return {
-    title: "Neuer Termin",
-    body: [event.title, when].filter(Boolean).join(" · "),
-  };
+  return liveEventNotificationCopy(event);
 }
 
 async function notifyOs(event: AppointmentLiveEvent, title: string, body: string) {
@@ -163,6 +133,7 @@ export function useAppointmentAlerts() {
     };
     window.setTimeout(() => {
       void maybeRequestPush();
+      void registerNativePushToken();
     }, 2500);
   }
 

@@ -1,4 +1,5 @@
 import type { AuthSession } from "~/types/auth";
+import { unregisterNativePushToken } from "~/utils/push-registration";
 
 export function useAuth() {
   const session = useState<AuthSession | null>("auth:session", () => null);
@@ -48,6 +49,7 @@ export function useAuth() {
   }
 
   async function logout() {
+    await unregisterNativePushToken();
     await $fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     session.value = null;
     await navigateTo("/login");

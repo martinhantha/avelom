@@ -129,6 +129,52 @@ public class AvelomDevicePlugin extends Plugin {
         requestPermissionForAlias("microphone", call, "permissionsCallback");
     }
 
+    @Override
+    public void load() {
+        ensureNotificationChannel();
+    }
+
+    @PluginMethod
+    public void getPushToken(PluginCall call) {
+        ensureNotificationChannel();
+        try {
+            Class<?> messagingClass = Class.forName("com.google.firebase.messaging.FirebaseMessaging");
+            Object messaging = messagingClass.getMethod("getInstance").invoke(null);
+            Object task = messagingClass.getMethod("getToken").invoke(messaging);
+            Class<?> taskClass = Class.forName("com.google.android.gms.tasks.Task");
+            java.lang.reflect.Method addListener = taskClass.getMethod(
+                "addOnCompleteListener",
+                Class.forName("com.google.android.gms.tasks.OnCompleteListener")
+            );
+            Object listener = java.lang.reflect.Proxy.newProxyInstance(
+                taskClass.getClassLoader(),
+                new Class<?>[] { Class.forName("com.google.android.gms.tasks.OnCompleteListener") },
+                (proxy, method, args) -> {
+                    if (!"onComplete".equals(method.getName()) || args == null || args.length < 1) {
+                        return null;
+                    }
+                    Object completed = args[0];
+                    JSObject result = new JSObject();
+                    try {
+                        boolean success = Boolean.TRUE.equals(taskClass.getMethod("isSuccessful").invoke(completed));
+                        Object token = success ? taskClass.getMethod("getResult").invoke(completed) : null;
+                        if (token != null) {
+                            result.put("token", String.valueOf(token));
+                        }
+                    } catch (Exception ignored) {
+                        // Resolve empty so the web layer can keep using in-app alerts.
+                    }
+                    call.resolve(result);
+                    return null;
+                }
+            );
+            addListener.invoke(task, listener);
+        } catch (Throwable ignored) {
+            JSObject result = new JSObject();
+            call.resolve(result);
+        }
+    }
+
     @PluginMethod
     public void showLocalNotification(PluginCall call) {
         ensureNotificationChannel();

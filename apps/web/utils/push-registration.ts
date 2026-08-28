@@ -1,0 +1,43 @@
+import { Capacitor } from "@capacitor/core";
+import { AvelomDevice } from "@avelom/capacitor-call-hints";
+
+let lastToken: string | null = null;
+let registering = false;
+
+export async function registerNativePushToken(): Promise<void> {
+  if (!import.meta.client) return;
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return;
+  if (registering) return;
+  registering = true;
+  try {
+    await AvelomDevice.requestPermissions({ alias: "notifications" });
+    const result = await AvelomDevice.getPushToken();
+    const token = result.token?.trim();
+    if (!token) return;
+    lastToken = token;
+    await $fetch("/api/auth/push-token", {
+      method: "POST",
+      credentials: "include",
+      body: { token, platform: "android" },
+    });
+  } catch {
+    // Permission denied or Firebase not configured on this build.
+  } finally {
+    registering = false;
+  }
+}
+
+export async function unregisterNativePushToken(): Promise<void> {
+  const token = lastToken;
+  lastToken = null;
+  if (!token) return;
+  try {
+    await $fetch("/api/auth/push-token", {
+      method: "DELETE",
+      credentials: "include",
+      body: { token },
+    });
+  } catch {
+    // Session may already be gone.
+  }
+}

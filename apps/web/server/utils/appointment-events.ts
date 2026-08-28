@@ -1,5 +1,6 @@
 import type { AppointmentLiveEvent, AppointmentLiveEventType } from "~/types/live-events";
 import { prisma } from "~/server/utils/prisma";
+import { sendAppointmentPush } from "~/server/utils/push";
 import {
   assignedTeachersFromAppointment,
   shouldReceiveAppointmentLive,
@@ -86,14 +87,16 @@ export async function toAppointmentLiveEvent(
 
 export function publishAppointmentLive(event: AppointmentLiveEvent) {
   const tenantListeners = listeners.get(event.tenantId);
-  if (!tenantListeners?.size) return;
-  for (const listener of tenantListeners) {
-    try {
-      listener(event);
-    } catch {
-      // A broken subscriber must not block the others.
+  if (tenantListeners?.size) {
+    for (const listener of tenantListeners) {
+      try {
+        listener(event);
+      } catch {
+        // A broken subscriber must not block the others.
+      }
     }
   }
+  void sendAppointmentPush(event);
 }
 
 export function publishAppointmentCreated(event: AppointmentLiveEvent) {

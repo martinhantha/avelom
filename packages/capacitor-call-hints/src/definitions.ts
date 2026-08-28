@@ -27,6 +27,7 @@ export interface AvelomDevicePlugin {
   openAppSettings(): Promise<void>;
   openWhatsApp(options: { phone: string; app?: "whatsapp" | "business" }): Promise<void>;
   showLocalNotification(options: { title: string; body: string; id?: string }): Promise<void>;
+  getPushToken(): Promise<{ token?: string | null }>;
   startSpeechRecognition(options?: { lang?: string }): Promise<void>;
   stopSpeechRecognition(): Promise<void>;
   addListener(

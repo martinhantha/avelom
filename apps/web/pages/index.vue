@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
 import { useAuth } from "../composables/useAuth";
-import { formatAppointmentTeachers } from "../utils/appointment-contact";
+import { formatTeachersCaption } from "../utils/appointment-contact";
 import type { SuperadminOverview, TenantRole } from "../types/superadmin";
 
 interface AppointmentListItem {
@@ -29,6 +29,14 @@ interface AppointmentListItem {
 const { user, primaryTenant, teacherLabel, resourcesEnabled, speechRecognitionEnabled, canManageTenant, canAccessWorkspace } =
   useAuth();
 const isSuperadmin = computed(() => Boolean(user.value?.isSuperadmin));
+
+function teachersCaption(appointment: AppointmentListItem) {
+  return formatTeachersCaption(appointment, {
+    teacherProfileId: primaryTenant.value?.teacherProfileId,
+    canManageTenant: canManageTenant.value,
+    teacherLabel: teacherLabel.value,
+  });
+}
 
 const overview = ref<SuperadminOverview | null>(null);
 const saLoading = ref(false);
@@ -478,7 +486,7 @@ async function deleteAppointment(appointment: AppointmentListItem) {
                   </UBadge>
                 </div>
                 <div class="mt-1.5 flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-neutral-400">
-                  <span v-if="formatAppointmentTeachers(appointment)">{{ teacherLabel }}: {{ formatAppointmentTeachers(appointment) }}</span>
+                  <span v-if="teachersCaption(appointment)">{{ teachersCaption(appointment) }}</span>
                   <span v-if="resourcesEnabled && appointment.resource">Ressource: {{ appointment.resource.name }}</span>
                   <span v-if="appointment.lessonType">Art: {{ appointment.lessonType.name }}</span>
                 </div>

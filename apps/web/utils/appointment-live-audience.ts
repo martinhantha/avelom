@@ -53,3 +53,58 @@ export function shouldReceiveAppointmentLive(
   }
   return false;
 }
+
+export function pushRecipientUserIds(
+  event: Pick<
+    AppointmentLiveEvent,
+    "type" | "actorUserId" | "createdByUserId" | "teacherUserId" | "teacherUserIds"
+  >,
+): string[] {
+  const ids = new Set<string>();
+  for (const id of event.teacherUserIds ?? []) ids.add(id);
+  if (event.teacherUserId) ids.add(event.teacherUserId);
+  if (event.type !== "appointment.created" && event.createdByUserId) {
+    ids.add(event.createdByUserId);
+  }
+  ids.delete(event.actorUserId);
+  return [...ids];
+}
+
+export function liveEventNotificationCopy(event: Pick<AppointmentLiveEvent, "type" | "title" | "startsAt" | "previousStartsAt">): {
+  title: string;
+  body: string;
+} {
+  const when = new Intl.DateTimeFormat("de-DE", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(event.startsAt));
+
+  if (event.type === "appointment.moved") {
+    const previous = event.previousStartsAt
+      ? new Intl.DateTimeFormat("de-DE", {
+          weekday: "short",
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date(event.previousStartsAt))
+      : "";
+    return {
+      title: "Termin verschoben",
+      body: [event.title, previous ? `${previous} → ${when}` : when].filter(Boolean).join(" · "),
+    };
+  }
+  if (event.type === "appointment.deleted") {
+    return {
+      title: "Termin gelöscht",
+      body: [event.title, when].filter(Boolean).join(" · "),
+    };
+  }
+  return {
+    title: "Neuer Termin",
+    body: [event.title, when].filter(Boolean).join(" · "),
+  };
+}

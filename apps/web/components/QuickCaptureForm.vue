@@ -510,10 +510,18 @@ function toggleTeacher(id: string) {
   form.teacherIds.push(id);
 }
 
-const assignedTeacherLabel = computed(() => {
-  const selected = (options.value?.teachers || []).filter((item) => form.teacherIds.includes(item.id));
-  if (selected.length) return selected.map((item) => item.displayName).join(", ");
-  return `Ohne ${teacherLabel.value}`;
+const colleagueNames = computed(() => {
+  const mine = primaryTenant.value?.teacherProfileId;
+  const list = props.appointment?.teachers?.length
+    ? props.appointment.teachers
+    : props.appointment?.teacher
+      ? [props.appointment.teacher]
+      : [];
+  return list
+    .filter((item) => item.id && item.id !== mine)
+    .map((item) => item.displayName)
+    .filter(Boolean)
+    .join(", ");
 });
 
 if (props.appointment?.customer?.displayName) {
@@ -1082,7 +1090,7 @@ onMounted(() => {
     </div>
 
     <div class="grid gap-3 sm:grid-cols-2">
-      <UFormField :label="teacherLabel" class="sm:col-span-2">
+      <UFormField v-if="canManageTenant || colleagueNames" :label="teacherLabel" class="sm:col-span-2">
         <div v-if="canManageTenant" class="flex flex-wrap gap-2">
           <UButton
             v-for="teacher in options?.teachers || []"
@@ -1106,7 +1114,7 @@ onMounted(() => {
           v-else
           class="rounded-md border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-sm"
         >
-          {{ assignedTeacherLabel }}
+          Mit: {{ colleagueNames }}
         </p>
       </UFormField>
 

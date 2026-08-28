@@ -18,6 +18,7 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "findContactByPhone", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "deleteContactByPhone", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "showLocalNotification", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getPushToken", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startSpeechRecognition", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopSpeechRecognition", returnType: CAPPluginReturnPromise)
     ]
@@ -214,6 +215,10 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func showLocalNotification(_ call: CAPPluginCall) {
         call.resolve()
+    }
+
+    @objc func getPushToken(_ call: CAPPluginCall) {
+        call.resolve(["token": NSNull()])
     }
 
     @objc func startSpeechRecognition(_ call: CAPPluginCall) {
