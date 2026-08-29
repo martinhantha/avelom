@@ -744,7 +744,12 @@ export async function patchAppointment(
   const data: Prisma.AppointmentUncheckedUpdateInput = {
     version: { increment: 1 },
   };
-  if (hasOwn(body, "startsAt")) data.startsAt = startsAt;
+  if (hasOwn(body, "startsAt")) {
+    data.startsAt = startsAt;
+    if (startsAt.getTime() !== existing.startsAt.getTime()) {
+      data.reminderPushSentAt = null;
+    }
+  }
   if (hasOwn(body, "endsAt")) data.endsAt = endsAt;
   if (hasOwn(body, "status")) data.status = status;
   if (hasOwn(body, "lessonTypeId")) data.lessonTypeId = lessonTypeId;

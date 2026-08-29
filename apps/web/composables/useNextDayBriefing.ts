@@ -1,10 +1,15 @@
 import { Capacitor } from "@capacitor/core";
-import { AvelomDevice } from "@avelom/capacitor-call-hints";
 import { APPOINTMENT_LIVE_EVENT } from "~/types/live-events";
 import { resolveAppointmentDisplayName, isAssignedTeacher } from "~/utils/appointment-contact";
+import {
+  addCalendarDays,
+  BRIEFING_HOUR,
+  BUSINESS_TIME_ZONE,
+  dateKey,
+  tzParts,
+  zonedLocalDate,
+} from "~/utils/rome-time";
 
-const TZ = "Europe/Rome";
-const BRIEFING_HOUR = 8;
 const POLL_MS = 60_000;
 const SHOWN_KEY = "avelom.briefing.shown";
 
@@ -29,42 +34,6 @@ interface AppointmentListItem {
   customer: { displayName: string | null } | null;
 }
 
-function tzParts(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return {
-    year: Number(map.year),
-    month: Number(map.month),
-    day: Number(map.day),
-    hour: Number(map.hour),
-    minute: Number(map.minute),
-  };
-}
-
-function dateKey(parts: { year: number; month: number; day: number }) {
-  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-}
-
-function addCalendarDays(parts: { year: number; month: number; day: number }, days: number) {
-  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
-  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
-}
-
-function zonedLocalDate(ymd: { year: number; month: number; day: number }, hour: number, minute = 0) {
-  const utcGuess = Date.UTC(ymd.year, ymd.month - 1, ymd.day, hour, minute, 0);
-  const asLocal = tzParts(new Date(utcGuess));
-  const localAsUtc = Date.UTC(asLocal.year, asLocal.month - 1, asLocal.day, asLocal.hour, asLocal.minute);
-  return new Date(utcGuess - (localAsUtc - utcGuess));
-}
-
 function loadShownKeys(): Set<string> {
   if (!import.meta.client) return new Set();
   try {
@@ -83,7 +52,7 @@ function persistShownKeys(keys: Set<string>) {
 
 function formatTime(value: string) {
   return new Intl.DateTimeFormat("de-DE", {
-    timeZone: TZ,
+    timeZone: BUSINESS_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
@@ -94,18 +63,8 @@ async function notifyOs(briefing: NextDayBriefing) {
   const title = "Termine morgen";
   const body = `${briefing.items.length} ${briefing.items.length === 1 ? "Termin" : "Termine"} · ${times}`;
 
-  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
-    try {
-      await AvelomDevice.showLocalNotification({
-        title,
-        body,
-        id: `briefing-${briefing.dateKey}`,
-      });
-      return;
-    } catch {
-      // Fall through to the browser Notification API.
-    }
-  }
+  // Native OS banners come from FCM so a killed app still gets the briefing.
+  if (Capacitor.isNativePlatform()) return;
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   try {
     new Notification(title, { body, tag: `briefing-${briefing.dateKey}` });

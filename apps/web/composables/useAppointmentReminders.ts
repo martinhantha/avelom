@@ -1,9 +1,8 @@
 import { Capacitor } from "@capacitor/core";
-import { AvelomDevice } from "@avelom/capacitor-call-hints";
 import { APPOINTMENT_LIVE_EVENT } from "~/types/live-events";
 import { resolveAppointmentDisplayName, formatAppointmentTeachers, isAssignedTeacher } from "~/utils/appointment-contact";
+import { REMINDER_LEAD_MS } from "~/utils/rome-time";
 
-const LEAD_MS = 15 * 60 * 1000;
 const LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
 const POLL_MS = 60_000;
 const SHOWN_KEY = "avelom.reminders.shown";
@@ -51,18 +50,8 @@ function toReminder(item: AppointmentListItem): AppointmentReminder {
 }
 
 async function notifyOs(reminder: AppointmentReminder, body: string) {
-  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
-    try {
-      await AvelomDevice.showLocalNotification({
-        title: "Terminerinnerung",
-        body,
-        id: `reminder-${reminder.id}`,
-      });
-      return;
-    } catch {
-      // Fall through to the browser Notification API.
-    }
-  }
+  // Native OS banners for due reminders come from FCM so a killed app still gets them.
+  if (Capacitor.isNativePlatform()) return;
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   try {
     new Notification("Terminerinnerung", { body, tag: `reminder-${reminder.id}` });
@@ -135,7 +124,7 @@ export function useAppointmentReminders() {
       if (!Number.isFinite(start) || start <= now) continue;
       if (shownIds.value.has(item.id)) continue;
       upcomingIds.add(item.id);
-      const fireAt = start - LEAD_MS;
+      const fireAt = start - REMINDER_LEAD_MS;
       if (fireAt <= now) {
         due.push(toReminder(item));
         continue;

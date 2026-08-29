@@ -63,6 +63,10 @@ function firebaseConfig(): FirebaseConfig | null {
   return { projectId, clientEmail, privateKey };
 }
 
+export function isFirebasePushConfigured(): boolean {
+  return firebaseConfig() !== null;
+}
+
 async function firebaseAccessToken(): Promise<string | null> {
   const config = firebaseConfig();
   if (!config) return null;
@@ -150,10 +154,15 @@ async function sendFcmMessage(
   }
 }
 
-export async function sendAppointmentPush(event: AppointmentLiveEvent): Promise<void> {
+export async function sendPushToUsers(input: {
+  userIds: string[];
+  title: string;
+  body: string;
+  data: Record<string, string>;
+}): Promise<void> {
   const config = firebaseConfig();
   if (!config) return;
-  const userIds = pushRecipientUserIds(event);
+  const userIds = [...new Set(input.userIds.filter(Boolean))];
   if (!userIds.length) return;
   const rows = await prisma.devicePushToken.findMany({
     where: { userId: { in: userIds } },
@@ -168,12 +177,6 @@ export async function sendAppointmentPush(event: AppointmentLiveEvent): Promise<
     console.warn("[push] could not get Firebase access token");
     return;
   }
-  const copy = liveEventNotificationCopy(event);
-  const data = {
-    type: event.type,
-    appointmentId: event.appointmentId,
-    tenantId: event.tenantId,
-  };
   const stale: string[] = [];
   await Promise.all(
     rows.map(async (row) => {
@@ -181,9 +184,9 @@ export async function sendAppointmentPush(event: AppointmentLiveEvent): Promise<
         accessToken,
         config.projectId,
         row.token,
-        copy.title,
-        copy.body,
-        data,
+        input.title,
+        input.body,
+        input.data,
       );
       if (result === "gone") stale.push(row.id);
     }),
@@ -191,4 +194,20 @@ export async function sendAppointmentPush(event: AppointmentLiveEvent): Promise<
   if (stale.length) {
     await prisma.devicePushToken.deleteMany({ where: { id: { in: stale } } });
   }
+}
+
+export async function sendAppointmentPush(event: AppointmentLiveEvent): Promise<void> {
+  const userIds = pushRecipientUserIds(event);
+  if (!userIds.length) return;
+  const copy = liveEventNotificationCopy(event);
+  await sendPushToUsers({
+    userIds,
+    title: copy.title,
+    body: copy.body,
+    data: {
+      type: event.type,
+      appointmentId: event.appointmentId,
+      tenantId: event.tenantId,
+    },
+  });
 }
