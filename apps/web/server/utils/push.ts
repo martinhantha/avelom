@@ -159,26 +159,26 @@ export async function sendPushToUsers(input: {
   title: string;
   body: string;
   data: Record<string, string>;
-}): Promise<void> {
+}): Promise<{ sent: number }> {
   const config = firebaseConfig();
-  if (!config) return;
+  if (!config) return { sent: 0 };
   const userIds = [...new Set(input.userIds.filter(Boolean))];
-  if (!userIds.length) return;
+  if (!userIds.length) return { sent: 0 };
   const rows = await prisma.devicePushToken.findMany({
     where: { userId: { in: userIds } },
     select: { id: true, token: true },
   });
   if (!rows.length) {
     console.warn("[push] no registered device tokens for", userIds);
-    return;
+    return { sent: 0 };
   }
   const accessToken = await firebaseAccessToken();
   if (!accessToken) {
     console.warn("[push] could not get Firebase access token");
-    return;
+    return { sent: 0 };
   }
   const stale: string[] = [];
-  await Promise.all(
+  const results = await Promise.all(
     rows.map(async (row) => {
       const result = await sendFcmMessage(
         accessToken,
@@ -189,11 +189,13 @@ export async function sendPushToUsers(input: {
         input.data,
       );
       if (result === "gone") stale.push(row.id);
+      return result;
     }),
   );
   if (stale.length) {
     await prisma.devicePushToken.deleteMany({ where: { id: { in: stale } } });
   }
+  return { sent: results.filter((result) => result === "ok").length };
 }
 
 export async function sendAppointmentPush(event: AppointmentLiveEvent): Promise<void> {

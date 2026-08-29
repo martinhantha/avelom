@@ -670,7 +670,7 @@ onMounted(() => {
           <div>
             <p class="font-medium">Termine am nächsten Tag</p>
             <p class="text-xs text-neutral-500 mt-1">
-              Um 8 Uhr eine Übersicht, wenn du am nächsten Tag eigene Termine hast — wie viele und wann.
+              Um 20 Uhr eine Übersicht für den nächsten Tag, wenn du eigene Termine hast — wie viele und wann.
               Standardmäßig aktiv.
             </p>
           </div>

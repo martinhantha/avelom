@@ -1,37 +1,25 @@
 import { runScheduledPushTick } from "~/server/utils/scheduled-push";
 
-const TICK_MS = 30_000;
+const TICK_MS = 15_000;
 
 const globalForSched = globalThis as typeof globalThis & {
-  avelomScheduledPush?: { timer?: ReturnType<typeof setInterval>; running?: boolean };
+  avelomScheduledPushTimer?: ReturnType<typeof setInterval>;
 };
 
 export default defineNitroPlugin((nitro) => {
   if (import.meta.prerender) return;
+  if (globalForSched.avelomScheduledPushTimer) return;
 
-  const state = globalForSched.avelomScheduledPush ?? {};
-  globalForSched.avelomScheduledPush = state;
-  if (state.timer) return;
-
-  const tick = async () => {
-    if (state.running) return;
-    state.running = true;
-    try {
-      await runScheduledPushTick();
-    } catch (error) {
-      console.warn("[push] scheduled tick failed", error);
-    } finally {
-      state.running = false;
-    }
-  };
-
-  void tick();
-  state.timer = setInterval(() => {
-    void tick();
+  console.info("[push] scheduled reminder/briefing ticker started");
+  void runScheduledPushTick();
+  globalForSched.avelomScheduledPushTimer = setInterval(() => {
+    void runScheduledPushTick();
   }, TICK_MS);
 
   nitro.hooks.hook("close", () => {
-    if (state.timer) clearInterval(state.timer);
-    state.timer = undefined;
+    if (globalForSched.avelomScheduledPushTimer) {
+      clearInterval(globalForSched.avelomScheduledPushTimer);
+      globalForSched.avelomScheduledPushTimer = undefined;
+    }
   });
 });

@@ -1,5 +1,5 @@
 export const BUSINESS_TIME_ZONE = "Europe/Rome";
-export const BRIEFING_HOUR = 8;
+export const BRIEFING_HOUR = 20;
 export const REMINDER_LEAD_MS = 15 * 60 * 1000;
 
 export function tzParts(date: Date) {

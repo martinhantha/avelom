@@ -1,4 +1,9 @@
-export default defineEventHandler(() => ({
-  ok: true as const,
-  service: "avelom-web",
-}));
+import { runScheduledPushTick } from "~/server/utils/scheduled-push";
+
+export default defineEventHandler(() => {
+  void runScheduledPushTick();
+  return {
+    ok: true as const,
+    service: "avelom-web",
+  };
+});

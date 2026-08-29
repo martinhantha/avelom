@@ -114,7 +114,7 @@ model User {
   disabledAt DateTime?
   deletedAt DateTime?
   deletedByUserId String? @db.Uuid
-  /// when true, send next-day appointment briefing at 08:00; default on
+  /// when true, send next-day appointment briefing at 20:00; default on
   nextDayBriefingEnabled Boolean @default(true)
 
   memberships          Membership[]

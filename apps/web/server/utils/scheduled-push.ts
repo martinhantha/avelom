@@ -1,17 +1,21 @@
 import { AppointmentStatus, Prisma } from "@prisma/client";
 import { prisma } from "~/server/utils/prisma";
 import { sendPushToUsers, isFirebasePushConfigured } from "~/server/utils/push";
-import { appointmentEventTitle } from "~/server/utils/appointment-events";
 import { assignedTeachersFromAppointment } from "~/utils/appointment-live-audience";
 import { resolveAppointmentDisplayName } from "~/utils/appointment-contact";
 import {
   addCalendarDays,
+  BUSINESS_TIME_ZONE,
   dateKey,
   isBriefingDue,
   REMINDER_LEAD_MS,
   tzParts,
   zonedLocalDate,
 } from "~/utils/rome-time";
+
+const globalForSched = globalThis as typeof globalThis & {
+  avelomScheduledPushRunning?: boolean;
+};
 
 const reminderAppointmentSelect = {
   id: true,
@@ -30,8 +34,22 @@ const reminderAppointmentSelect = {
   },
 } as const;
 
+function briefingTitle(appointment: {
+  customer?: { displayName?: string | null } | null;
+  appointmentContactText?: string | null;
+  lessonType?: { name?: string | null } | null;
+}): string {
+  return (
+    appointment.customer?.displayName ||
+    appointment.appointmentContactText ||
+    appointment.lessonType?.name ||
+    "Termin"
+  );
+}
+
 function formatWhen(startsAt: Date) {
   return new Intl.DateTimeFormat("de-DE", {
+    timeZone: BUSINESS_TIME_ZONE,
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
@@ -42,10 +60,17 @@ function formatWhen(startsAt: Date) {
 
 function formatClock(startsAt: Date) {
   return new Intl.DateTimeFormat("de-DE", {
-    timeZone: "Europe/Rome",
+    timeZone: BUSINESS_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
   }).format(startsAt);
+}
+
+async function unclaimReminder(appointmentId: string): Promise<void> {
+  await prisma.appointment.updateMany({
+    where: { id: appointmentId },
+    data: { reminderPushSentAt: null },
+  });
 }
 
 async function teacherUserIds(appointment: {
@@ -96,6 +121,7 @@ async function sendDueReminders(now: Date): Promise<void> {
       },
     },
     select: reminderAppointmentSelect,
+    orderBy: { startsAt: "asc" },
     take: 50,
   });
 
@@ -108,13 +134,16 @@ async function sendDueReminders(now: Date): Promise<void> {
 
     try {
       const userIds = await teacherUserIds(appointment);
-      if (!userIds.length) continue;
+      if (!userIds.length) {
+        await unclaimReminder(appointment.id);
+        continue;
+      }
       const title = resolveAppointmentDisplayName(appointment);
       const minutes = Math.max(
         1,
         Math.round((appointment.startsAt.getTime() - now.getTime()) / 60_000),
       );
-      await sendPushToUsers({
+      const result = await sendPushToUsers({
         userIds,
         title: "Terminerinnerung",
         body: `${title} · in ${minutes} Min · ${formatWhen(appointment.startsAt)}`,
@@ -124,11 +153,12 @@ async function sendDueReminders(now: Date): Promise<void> {
           tenantId: appointment.tenantId,
         },
       });
+      if (!result.sent) {
+        await unclaimReminder(appointment.id);
+        console.warn("[push] reminder not delivered", appointment.id, userIds);
+      }
     } catch (error) {
-      await prisma.appointment.updateMany({
-        where: { id: appointment.id },
-        data: { reminderPushSentAt: null },
-      });
+      await unclaimReminder(appointment.id);
       console.warn("[push] reminder failed", appointment.id, error);
     }
   }
@@ -138,8 +168,8 @@ async function sendDueBriefings(now: Date): Promise<void> {
   if (!isBriefingDue(now)) return;
 
   const today = tzParts(now);
-  const todayKey = dateKey(today);
   const tomorrow = addCalendarDays(today, 1);
+  const forDateKey = dateKey(tomorrow);
   const from = zonedLocalDate(tomorrow, 0, 0);
   const to = zonedLocalDate(addCalendarDays(tomorrow, 1), 0, 0);
 
@@ -184,7 +214,7 @@ async function sendDueBriefings(now: Date): Promise<void> {
 
   const itemsByTeacher = new Map<string, Array<{ startsAt: Date; title: string }>>();
   for (const appointment of appointments) {
-    const title = appointmentEventTitle(appointment);
+    const title = briefingTitle(appointment);
     for (const assigned of assignedTeachersFromAppointment(appointment)) {
       const key = `${appointment.tenantId}:${assigned.id}`;
       const list = itemsByTeacher.get(key) ?? [];
@@ -196,33 +226,40 @@ async function sendDueBriefings(now: Date): Promise<void> {
   for (const teacher of teachers) {
     const userId = teacher.membership?.userId;
     if (!userId) continue;
+    const items = itemsByTeacher.get(`${teacher.tenantId}:${teacher.id}`) ?? [];
+    if (!items.length) continue;
+
     try {
       await prisma.nextDayBriefingPush.create({
-        data: { userId, tenantId: teacher.tenantId, dateKey: todayKey },
+        data: { userId, tenantId: teacher.tenantId, dateKey: forDateKey },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") continue;
       throw error;
     }
 
-    const items = itemsByTeacher.get(`${teacher.tenantId}:${teacher.id}`) ?? [];
-    if (!items.length) continue;
     items.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
     const times = items.map((item) => `${formatClock(item.startsAt)} ${item.title}`).join(", ");
     try {
-      await sendPushToUsers({
+      const result = await sendPushToUsers({
         userIds: [userId],
         title: "Termine morgen",
         body: `${items.length} ${items.length === 1 ? "Termin" : "Termine"} · ${times}`,
         data: {
           type: "appointment.briefing",
           tenantId: teacher.tenantId,
-          dateKey: todayKey,
+          dateKey: forDateKey,
         },
       });
+      if (!result.sent) {
+        await prisma.nextDayBriefingPush.deleteMany({
+          where: { userId, tenantId: teacher.tenantId, dateKey: forDateKey },
+        });
+        console.warn("[push] briefing not delivered", userId, teacher.tenantId);
+      }
     } catch (error) {
       await prisma.nextDayBriefingPush.deleteMany({
-        where: { userId, tenantId: teacher.tenantId, dateKey: todayKey },
+        where: { userId, tenantId: teacher.tenantId, dateKey: forDateKey },
       });
       console.warn("[push] briefing failed", userId, teacher.tenantId, error);
     }
@@ -230,7 +267,15 @@ async function sendDueBriefings(now: Date): Promise<void> {
 }
 
 export async function runScheduledPushTick(now = new Date()): Promise<void> {
+  if (globalForSched.avelomScheduledPushRunning) return;
   if (!isFirebasePushConfigured()) return;
-  await sendDueReminders(now);
-  await sendDueBriefings(now);
+  globalForSched.avelomScheduledPushRunning = true;
+  try {
+    await sendDueReminders(now);
+    await sendDueBriefings(now);
+  } catch (error) {
+    console.warn("[push] scheduled tick failed", error);
+  } finally {
+    globalForSched.avelomScheduledPushRunning = false;
+  }
 }
