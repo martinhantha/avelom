@@ -375,7 +375,7 @@ function ruleDays(item: AvailabilityRule): number[] {
 }
 
 function ruleTimeLabel(item: AvailabilityRule): string {
-  if (item.allDay || item.kind === "unavailable" && item.startTime === "00:00" && item.endTime === "23:59") {
+  if (item.allDay || (item.kind === "unavailable" && item.startTime === "00:00" && item.endTime === "23:59")) {
     return "ganzer Tag";
   }
   return `${item.startTime}–${item.endTime}`;
@@ -1059,10 +1059,13 @@ onMounted(() => {
           <div v-else class="divide-y divide-neutral-200 dark:divide-neutral-800">
             <div v-for="item in rules" :key="item.id" class="flex items-center justify-between py-2 gap-3">
               <div>
-                <p class="font-medium">
-                  {{ weekdayLabels[item.weekday] }} · {{ item.startTime }}–{{ item.endTime }}
+                <p class="font-medium" :class="item.kind === 'unavailable' ? 'text-red-600 dark:text-red-400' : ''">
+                  {{ formatWeekdays(ruleDays(item)) }} · {{ ruleTimeLabel(item) }}
                 </p>
-                <p class="text-xs text-neutral-500">Priorität: {{ item.priority }}</p>
+                <p class="text-xs text-neutral-500">
+                  {{ item.kind === "unavailable" ? "Nicht verfügbar" : "Verfügbar" }}
+                  <span v-if="item.kind !== 'unavailable'"> · Priorität {{ item.priority }}</span>
+                </p>
               </div>
               <div class="flex gap-1">
                 <UButton size="xs" variant="ghost" color="neutral" icon="i-lucide-pencil" :disabled="!canEdit" @click="selectRule(item)" />
@@ -1077,6 +1080,39 @@ onMounted(() => {
             <h2 class="font-medium">{{ ruleForm.id ? "Regel bearbeiten" : "Neue Regel" }}</h2>
           </template>
           <form class="space-y-3" @submit.prevent="saveRule">
+            <UFormField label="Art">
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  class="rounded-md border px-3 py-1.5 text-sm font-medium transition"
+                  :class="
+                    ruleForm.kind === 'available'
+                      ? 'border-primary-500 bg-primary-500 text-white'
+                      : 'border-neutral-300 bg-white text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200'
+                  "
+                  :disabled="!canEdit"
+                  @click="setRuleKind('available')"
+                >
+                  Verfügbar
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md border px-3 py-1.5 text-sm font-medium transition"
+                  :class="
+                    ruleForm.kind === 'unavailable'
+                      ? 'border-red-500 bg-red-500 text-white'
+                      : 'border-neutral-300 bg-white text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200'
+                  "
+                  :disabled="!canEdit"
+                  @click="setRuleKind('unavailable')"
+                >
+                  Nicht verfügbar
+                </button>
+              </div>
+              <p class="mt-1 text-xs text-neutral-500">
+                Mehrere Tage bleiben eine Regel. „Nicht verfügbar“ blockiert ganze Tage oder einzelne Stunden.
+              </p>
+            </UFormField>
             <UFormField label="Wochentage">
               <div class="flex flex-wrap gap-1.5">
                 <button
@@ -1109,7 +1145,14 @@ onMounted(() => {
                 </UButton>
               </div>
             </UFormField>
-            <div class="grid grid-cols-2 gap-2">
+            <label
+              v-if="ruleForm.kind === 'unavailable'"
+              class="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300"
+            >
+              <input v-model="ruleForm.allDay" type="checkbox" :disabled="!canEdit" />
+              Ganzer Tag
+            </label>
+            <div v-if="!(ruleForm.kind === 'unavailable' && ruleForm.allDay)" class="grid grid-cols-2 gap-2">
               <UFormField label="Von">
                 <UInput v-model="ruleForm.startTime" type="time" :disabled="!canEdit" />
               </UFormField>
@@ -1117,7 +1160,11 @@ onMounted(() => {
                 <UInput v-model="ruleForm.endTime" type="time" :disabled="!canEdit" />
               </UFormField>
             </div>
-            <UFormField label="Priorität" hint="Höhere Zahl = wird zuerst als nächster freier Termin vorgeschlagen">
+            <UFormField
+              v-if="ruleForm.kind === 'available'"
+              label="Priorität"
+              hint="Höhere Zahl = wird zuerst als nächster freier Termin vorgeschlagen"
+            >
               <UInput v-model.number="ruleForm.priority" type="number" :disabled="!canEdit" />
             </UFormField>
             <div class="flex gap-2">

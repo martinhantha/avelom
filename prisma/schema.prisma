@@ -376,7 +376,7 @@ model AvailabilityRule {
   tenantId    String    @db.Uuid
   teacherId   String    @db.Uuid
   weekday     Int       // first weekday (0 = Sunday .. 6 = Saturday); sort key
-  weekdays    Int[]     // all weekdays this rule applies to
+  weekdays    Int[]     @default([]) // all weekdays this rule applies to
   startTime   String    // "HH:mm" local business logic
   endTime     String
   kind        AvailabilityRuleKind @default(available)

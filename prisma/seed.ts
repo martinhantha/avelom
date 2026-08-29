@@ -134,32 +134,53 @@ async function main(): Promise<void> {
     });
   }
 
-  for (const weekday of [1, 2, 3, 4, 5]) {
-    const existingRule = await prisma.availabilityRule.findFirst({
+  const weekdays = [1, 2, 3, 4, 5];
+  const existingRule = await prisma.availabilityRule.findFirst({
+    where: {
+      tenantId: tenant.id,
+      teacherId: teacher.id,
+      startTime: "08:00",
+      endTime: "18:00",
+      deletedAt: null,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existingRule) {
+    await prisma.availabilityRule.update({
+      where: { id: existingRule.id },
+      data: {
+        weekday: 1,
+        weekdays,
+        kind: "available",
+        allDay: false,
+        deletedAt: null,
+        deletedByUserId: null,
+      },
+    });
+    await prisma.availabilityRule.updateMany({
       where: {
         tenantId: tenant.id,
         teacherId: teacher.id,
-        weekday,
         startTime: "08:00",
         endTime: "18:00",
+        deletedAt: null,
+        id: { not: existingRule.id },
+      },
+      data: { deletedAt: new Date() },
+    });
+  } else {
+    await prisma.availabilityRule.create({
+      data: {
+        tenantId: tenant.id,
+        teacherId: teacher.id,
+        weekday: 1,
+        weekdays,
+        startTime: "08:00",
+        endTime: "18:00",
+        kind: "available",
+        allDay: false,
       },
     });
-    if (existingRule) {
-      await prisma.availabilityRule.update({
-        where: { id: existingRule.id },
-        data: { deletedAt: null, deletedByUserId: null },
-      });
-    } else {
-      await prisma.availabilityRule.create({
-        data: {
-          tenantId: tenant.id,
-          teacherId: teacher.id,
-          weekday,
-          startTime: "08:00",
-          endTime: "18:00",
-        },
-      });
-    }
   }
 
   console.info(`Seed OK — login: ${DEMO_EMAIL} / ${DEMO_PASSWORD} (tenant: ${TENANT_SLUG})`);
