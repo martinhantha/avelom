@@ -40,6 +40,11 @@ enum AvailabilityExceptionType {
   extra_open
 }
 
+enum AvailabilityRuleKind {
+  available
+  unavailable
+}
+
 enum PreferenceSource {
   explicit_user
   admin_default
@@ -370,9 +375,12 @@ model AvailabilityRule {
   id          String    @id @default(uuid()) @db.Uuid
   tenantId    String    @db.Uuid
   teacherId   String    @db.Uuid
-  weekday     Int       // 0 = Sunday .. 6 = Saturday (align with JS Date)
+  weekday     Int       // first weekday (0 = Sunday .. 6 = Saturday); sort key
+  weekdays    Int[]     // all weekdays this rule applies to
   startTime   String    // "HH:mm" local business logic
   endTime     String
+  kind        AvailabilityRuleKind @default(available)
+  allDay      Boolean   @default(false)
   locationId  String?   @db.Uuid
   activityTags Json?
   priority    Int       @default(0)
