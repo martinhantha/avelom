@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { permissionLabel } from "../composables/useNativePermissions";
+
 const { speechRecognitionEnabled } = useAuth();
 const {
   open,
   requesting,
+  lastError,
   isNative,
   microphoneGranted,
   contactsGranted,
@@ -11,10 +14,6 @@ const {
   requestNow,
   openAppSettings,
 } = useNativePermissions({ autoPrompt: true, needMicrophone: speechRecognitionEnabled });
-
-function permissionLabel(granted: boolean) {
-  return granted ? "Erlaubt" : "Noch nicht erlaubt";
-}
 </script>
 
 <template>
@@ -45,14 +44,29 @@ function permissionLabel(granted: boolean) {
       <p v-if="anyDenied" class="mt-3 text-xs text-neutral-500">
         Wenn Android nichts mehr anzeigt, die Rechte in den App-Einstellungen einschalten.
       </p>
+      <p v-if="lastError" class="mt-3 text-xs text-red-600 dark:text-red-400">{{ lastError }}</p>
     </template>
     <template #footer>
       <div class="flex flex-wrap justify-end gap-2 w-full">
-        <UButton variant="ghost" color="neutral" @click="open = false">Später</UButton>
-        <UButton v-if="anyDenied" variant="soft" color="neutral" icon="i-lucide-settings-2" @click="openAppSettings">
+        <UButton type="button" variant="ghost" color="neutral" @click="open = false">Später</UButton>
+        <UButton
+          v-if="anyDenied"
+          type="button"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-settings-2"
+          @click="openAppSettings"
+        >
           Einstellungen
         </UButton>
-        <UButton color="primary" icon="i-lucide-shield-check" :loading="requesting" :disabled="allGranted" @click="requestNow">
+        <UButton
+          type="button"
+          color="primary"
+          icon="i-lucide-shield-check"
+          :loading="requesting"
+          :disabled="allGranted || requesting"
+          @click="requestNow"
+        >
           Jetzt erlauben
         </UButton>
       </div>

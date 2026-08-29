@@ -45,7 +45,7 @@ import java.util.HashSet;
 @CapacitorPlugin(
     name = "AvelomDevice",
     permissions = {
-        @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS }),
+        @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO }),
         @Permission(alias = "contacts", strings = { Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS }),
         @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
     }
@@ -67,28 +67,65 @@ public class AvelomDevicePlugin extends Plugin {
     private String speechLanguage = "de-DE";
     private final Handler speechHandler = new Handler(Looper.getMainLooper());
 
+    private boolean microphoneGranted() {
+        return hasPermission(Manifest.permission.RECORD_AUDIO);
+    }
+
+    private boolean contactsGranted() {
+        return hasPermission(Manifest.permission.READ_CONTACTS) && hasPermission(Manifest.permission.WRITE_CONTACTS);
+    }
+
+    private String jsPermissionState(String alias, boolean granted) {
+        if (granted) {
+            return PermissionState.GRANTED.toString();
+        }
+        try {
+            PermissionState state = getPermissionState(alias);
+            if (state != null) {
+                return state.toString();
+            }
+        } catch (Exception ignored) {
+            // Capacitor alias lookup can be null before the first prompt.
+        }
+        return PermissionState.PROMPT.toString();
+    }
+
     @PluginMethod
+    @Override
     public void checkPermissions(PluginCall call) {
         JSObject result = new JSObject();
-        result.put("microphone", getPermissionState("microphone").toString());
-        result.put("contacts", getPermissionState("contacts").toString());
+        result.put("microphone", jsPermissionState("microphone", microphoneGranted()));
+        result.put("contacts", jsPermissionState("contacts", contactsGranted()));
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             result.put("notifications", PermissionState.GRANTED.toString());
         } else {
-            result.put("notifications", getPermissionState("notifications").toString());
+            result.put(
+                "notifications",
+                jsPermissionState("notifications", hasPermission(Manifest.permission.POST_NOTIFICATIONS))
+            );
         }
         call.resolve(result);
     }
 
     @PluginMethod
+    @Override
     public void requestPermissions(PluginCall call) {
         String alias = call.getString("alias");
+        if (alias == null || alias.isEmpty()) {
+            try {
+                if (call.getData() != null && call.getData().has("permissions")) {
+                    alias = call.getData().getJSONArray("permissions").optString(0, "");
+                }
+            } catch (Exception ignored) {
+                alias = "";
+            }
+        }
         if (alias == null || alias.isEmpty()) {
             requestAllPermissions(call);
             return;
         }
         if ("contacts".equals(alias)) {
-            if (getPermissionState("contacts") == PermissionState.GRANTED) {
+            if (contactsGranted()) {
                 checkPermissions(call);
                 return;
             }
@@ -97,14 +134,14 @@ public class AvelomDevicePlugin extends Plugin {
         }
         if ("notifications".equals(alias)) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
-                    || getPermissionState("notifications") == PermissionState.GRANTED) {
+                    || hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
                 checkPermissions(call);
                 return;
             }
             requestPermissionForAlias("notifications", call, "permissionsCallback");
             return;
         }
-        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+        if (microphoneGranted()) {
             checkPermissions(call);
             return;
         }
@@ -113,18 +150,23 @@ public class AvelomDevicePlugin extends Plugin {
 
     @PluginMethod
     public void requestAllPermissions(PluginCall call) {
-        boolean microphoneGranted = getPermissionState("microphone") == PermissionState.GRANTED;
-        boolean contactsGranted = getPermissionState("contacts") == PermissionState.GRANTED;
-        if (microphoneGranted && contactsGranted) {
+        ArrayList<String> aliases = new ArrayList<>();
+        if (!microphoneGranted()) {
+            aliases.add("microphone");
+        }
+        if (!contactsGranted()) {
+            aliases.add("contacts");
+        }
+        if (aliases.isEmpty()) {
             checkPermissions(call);
             return;
         }
-        requestPermissionForAliases(new String[] { "microphone", "contacts" }, call, "permissionsCallback");
+        requestPermissionForAliases(aliases.toArray(new String[0]), call, "permissionsCallback");
     }
 
     @PluginMethod
     public void requestMicrophone(PluginCall call) {
-        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+        if (microphoneGranted()) {
             checkPermissions(call);
             return;
         }
@@ -181,7 +223,7 @@ public class AvelomDevicePlugin extends Plugin {
     public void showLocalNotification(PluginCall call) {
         ensureNotificationChannel();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && getPermissionState("notifications") != PermissionState.GRANTED) {
+                && !hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
             call.resolve();
             return;
         }
@@ -253,7 +295,7 @@ public class AvelomDevicePlugin extends Plugin {
         Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
         intent.setData(Uri.parse("package:" + getContext().getPackageName()));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        getActivity().startActivity(intent);
+        getContext().startActivity(intent);
         call.resolve();
     }
 
@@ -324,7 +366,7 @@ public class AvelomDevicePlugin extends Plugin {
 
     @PluginMethod
     public void saveLocalContact(PluginCall call) {
-        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+        if (!contactsGranted()) {
             requestPermissionForAlias("contacts", call, "saveContactAfterPermission");
             return;
         }
@@ -333,7 +375,7 @@ public class AvelomDevicePlugin extends Plugin {
 
     @PermissionCallback
     private void saveContactAfterPermission(PluginCall call) {
-        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+        if (!contactsGranted()) {
             call.reject("WRITE_CONTACTS permission denied");
             return;
         }
@@ -378,7 +420,7 @@ public class AvelomDevicePlugin extends Plugin {
 
     @PluginMethod
     public void findContactByPhone(PluginCall call) {
-        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+        if (!contactsGranted()) {
             JSObject result = new JSObject();
             result.put("found", false);
             call.resolve(result);
@@ -397,7 +439,7 @@ public class AvelomDevicePlugin extends Plugin {
 
     @PluginMethod
     public void deleteContactByPhone(PluginCall call) {
-        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+        if (!contactsGranted()) {
             requestPermissionForAlias("contacts", call, "deleteContactAfterPermission");
             return;
         }
@@ -406,7 +448,7 @@ public class AvelomDevicePlugin extends Plugin {
 
     @PermissionCallback
     private void deleteContactAfterPermission(PluginCall call) {
-        if (getPermissionState("contacts") != PermissionState.GRANTED) {
+        if (!contactsGranted()) {
             call.reject("WRITE_CONTACTS permission denied");
             return;
         }

@@ -28,6 +28,23 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc override public func requestPermissions(_ call: CAPPluginCall) {
+        let alias = call.getString("alias")
+        if alias == "contacts" {
+            CNContactStore().requestAccess(for: .contacts) { _, _ in
+                DispatchQueue.main.async {
+                    call.resolve(self.permissionStatus())
+                }
+            }
+            return
+        }
+        if alias == "microphone" {
+            requestMicrophone(call)
+            return
+        }
+        if alias == "notifications" {
+            call.resolve(permissionStatus())
+            return
+        }
         requestAllPermissions(call)
     }
 

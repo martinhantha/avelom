@@ -23,19 +23,45 @@ export class CallHintsWeb extends WebPlugin implements CallHintsPlugin {
 
 export class AvelomDeviceWeb extends WebPlugin implements AvelomDevicePlugin {
   async checkPermissions(): Promise<AvelomDevicePermissionStatus> {
-    return { microphone: "prompt", contacts: "prompt" };
+    return {
+      microphone: await this.microphoneState(),
+      contacts: "prompt",
+    };
   }
 
   async requestPermissions(): Promise<AvelomDevicePermissionStatus> {
-    return this.checkPermissions();
+    return this.requestAllPermissions();
   }
 
   async requestMicrophone(): Promise<AvelomDevicePermissionStatus> {
+    await this.promptMicrophone();
     return this.checkPermissions();
   }
 
   async requestAllPermissions(): Promise<AvelomDevicePermissionStatus> {
+    await this.promptMicrophone();
     return this.checkPermissions();
+  }
+
+  private async microphoneState(): Promise<AvelomDevicePermissionStatus["microphone"]> {
+    try {
+      const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      if (result.state === "granted") return "granted";
+      if (result.state === "denied") return "denied";
+    } catch {
+      // Permissions API not available in this WebView.
+    }
+    return "prompt";
+  }
+
+  private async promptMicrophone(): Promise<void> {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      for (const track of stream.getTracks()) track.stop();
+    } catch {
+      // Denied or unsupported — checkPermissions reports the outcome.
+    }
   }
 
   async openAppSettings(): Promise<void> {

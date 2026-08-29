@@ -20,8 +20,11 @@ interface AvailabilityRule {
   id: string;
   teacherId: string;
   weekday: number;
+  weekdays: number[];
   startTime: string;
   endTime: string;
+  kind: "available" | "unavailable";
+  allDay: boolean;
   priority: number;
 }
 
@@ -30,6 +33,7 @@ const { device, setCallHintsOptIn } = useDeviceCapabilities();
 const {
   isNative,
   requesting: permissionsRequesting,
+  lastError: permissionsError,
   microphoneGranted,
   contactsGranted,
   allGranted,
@@ -323,9 +327,10 @@ const rules = ref<AvailabilityRule[]>([]);
 const ruleForm = reactive({
   id: "",
   weekdays: [1, 2, 3, 4, 5] as number[],
-  originalWeekday: null as number | null,
   startTime: "09:00",
   endTime: "17:00",
+  kind: "available" as "available" | "unavailable",
+  allDay: false,
   priority: 0,
 });
 const rulesLoading = ref(false);
@@ -336,6 +341,45 @@ const weekdayPresets = [
   { label: "Wochenende", days: [6, 0] },
   { label: "Alle", days: [1, 2, 3, 4, 5, 6, 0] },
 ];
+
+function orderedWeekdays(days: number[]): number[] {
+  const unique = [...new Set(days.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))];
+  return weekdayOrder.filter((day) => unique.includes(day));
+}
+
+function formatWeekdays(days: number[]): string {
+  const ordered = orderedWeekdays(days);
+  if (!ordered.length) return "";
+  const ranges: string[] = [];
+  let from = ordered[0];
+  let prev = ordered[0];
+  const flush = (start: number, end: number) => {
+    ranges.push(start === end ? weekdayLabels[start] : `${weekdayLabels[start]}–${weekdayLabels[end]}`);
+  };
+  for (let i = 1; i < ordered.length; i += 1) {
+    const day = ordered[i];
+    if (weekdayOrder.indexOf(day) === weekdayOrder.indexOf(prev) + 1) {
+      prev = day;
+      continue;
+    }
+    flush(from, prev);
+    from = day;
+    prev = day;
+  }
+  flush(from, prev);
+  return ranges.join(", ");
+}
+
+function ruleDays(item: AvailabilityRule): number[] {
+  return item.weekdays?.length ? item.weekdays : [item.weekday];
+}
+
+function ruleTimeLabel(item: AvailabilityRule): string {
+  if (item.allDay || item.kind === "unavailable" && item.startTime === "00:00" && item.endTime === "23:59") {
+    return "ganzer Tag";
+  }
+  return `${item.startTime}–${item.endTime}`;
+}
 
 function toggleWeekday(day: number) {
   const index = ruleForm.weekdays.indexOf(day);
@@ -351,9 +395,7 @@ function setWeekdays(days: number[]) {
 }
 
 function selectedWeekdays(): number[] {
-  return [...new Set(ruleForm.weekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort(
-    (a, b) => a - b,
-  );
+  return orderedWeekdays(ruleForm.weekdays);
 }
 
 async function loadTeachers() {
@@ -401,19 +443,32 @@ async function loadRules() {
 
 function selectRule(item: AvailabilityRule) {
   ruleForm.id = item.id;
-  ruleForm.weekdays = [item.weekday];
-  ruleForm.originalWeekday = item.weekday;
+  ruleForm.weekdays = ruleDays(item);
   ruleForm.startTime = item.startTime;
   ruleForm.endTime = item.endTime;
+  ruleForm.kind = item.kind === "unavailable" ? "unavailable" : "available";
+  ruleForm.allDay = Boolean(item.allDay);
   ruleForm.priority = item.priority;
 }
 function resetRuleForm() {
   ruleForm.id = "";
   ruleForm.weekdays = [1, 2, 3, 4, 5];
-  ruleForm.originalWeekday = null;
   ruleForm.startTime = "09:00";
   ruleForm.endTime = "17:00";
+  ruleForm.kind = "available";
+  ruleForm.allDay = false;
   ruleForm.priority = 0;
+}
+
+function setRuleKind(kind: "available" | "unavailable") {
+  ruleForm.kind = kind;
+  if (kind === "available") {
+    ruleForm.allDay = false;
+    if (ruleForm.startTime === "00:00" && ruleForm.endTime === "23:59") {
+      ruleForm.startTime = "09:00";
+      ruleForm.endTime = "17:00";
+    }
+  }
 }
 
 async function saveRule() {
@@ -426,33 +481,27 @@ async function saveRule() {
   rulesLoading.value = true;
   try {
     const base = `/api/v1/tenants/${primaryTenant.value.tenantId}/teachers/${selectedTeacherId.value}/availability/rules`;
-    const times = {
-      startTime: ruleForm.startTime,
-      endTime: ruleForm.endTime,
+    const allDay = ruleForm.kind === "unavailable" && ruleForm.allDay;
+    const body = {
+      weekdays: days,
+      startTime: allDay ? "00:00" : ruleForm.startTime,
+      endTime: allDay ? "23:59" : ruleForm.endTime,
+      kind: ruleForm.kind,
+      allDay,
       priority: Number(ruleForm.priority) || 0,
     };
     if (ruleForm.id) {
-      const original = ruleForm.originalWeekday;
-      const patchDay = original !== null && days.includes(original) ? original : days[0];
       await $fetch(`${base}/${ruleForm.id}`, {
         method: "PATCH",
         credentials: "include",
-        body: { weekday: patchDay, ...times },
+        body,
       });
-      const extraDays = days.filter((day) => day !== patchDay);
-      if (extraDays.length) {
-        await $fetch(base, {
-          method: "POST",
-          credentials: "include",
-          body: { weekdays: extraDays, ...times },
-        });
-      }
-      setInfo(extraDays.length ? "Regel aktualisiert und weitere Tage angelegt" : "Regel aktualisiert");
+      setInfo("Regel aktualisiert");
     } else {
       await $fetch(base, {
         method: "POST",
         credentials: "include",
-        body: { weekdays: days, ...times },
+        body,
       });
       setInfo(days.length > 1 ? `Regel für ${days.length} Tage angelegt` : "Regel angelegt");
     }
@@ -467,7 +516,8 @@ async function saveRule() {
 
 async function deleteRule(item: AvailabilityRule) {
   if (!primaryTenant.value?.tenantId || !selectedTeacherId.value) return;
-  if (!confirm(`Regel ${weekdayLabels[item.weekday]} ${item.startTime}–${item.endTime} löschen?`)) return;
+  const label = `${formatWeekdays(ruleDays(item))} · ${ruleTimeLabel(item)}`;
+  if (!confirm(`Regel ${label} löschen?`)) return;
   try {
     await $fetch(
       `/api/v1/tenants/${primaryTenant.value.tenantId}/teachers/${selectedTeacherId.value}/availability/rules/${item.id}`,
@@ -756,17 +806,19 @@ onMounted(() => {
             </ul>
             <div class="flex flex-wrap gap-2">
               <UButton
+                type="button"
                 size="sm"
                 color="primary"
                 icon="i-lucide-shield-check"
                 :loading="permissionsRequesting"
-                :disabled="allGranted"
+                :disabled="allGranted || permissionsRequesting"
                 @click="requestNow"
               >
                 Jetzt erlauben
               </UButton>
               <UButton
                 v-if="anyDenied || !allGranted"
+                type="button"
                 size="sm"
                 variant="soft"
                 color="neutral"
@@ -776,6 +828,7 @@ onMounted(() => {
                 App-Einstellungen
               </UButton>
             </div>
+            <p v-if="permissionsError" class="text-xs text-red-600 dark:text-red-400">{{ permissionsError }}</p>
           </div>
           <p v-else class="text-xs text-neutral-500">
             Kontakte speichern: in der App direkt ins Adressbuch, im Browser als vCard-Download.

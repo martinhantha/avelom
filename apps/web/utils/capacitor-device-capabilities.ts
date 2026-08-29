@@ -17,6 +17,11 @@ function nativePlatform(): DevicePlatform {
   return Capacitor.getPlatform() === "ios" ? "ios" : "android";
 }
 
+function permissionGranted(state: string | undefined) {
+  const value = String(state ?? "").toLowerCase();
+  return value === "granted" || value === "limited";
+}
+
 export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implements DeviceCapabilities {
   override readonly id = "capacitor";
   override readonly platform: DevicePlatform = nativePlatform();
@@ -70,7 +75,7 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
   override async requestMicrophonePermission(): Promise<boolean> {
     try {
       const status = await AvelomDevice.requestMicrophone();
-      if (status.microphone !== "granted") return false;
+      if (!permissionGranted(status.microphone)) return false;
     } catch {
       return false;
     }
@@ -121,7 +126,7 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
     if (trimmed.replace(/\D/g, "").length < 6) return { status: "unknown" };
     try {
       const permission = await AvelomDevice.checkPermissions();
-      if (permission.contacts !== "granted" && permission.contacts !== "limited") {
+      if (!permissionGranted(permission.contacts)) {
         return { status: "unknown" };
       }
       const result = await AvelomDevice.findContactByPhone({ phone: trimmed });

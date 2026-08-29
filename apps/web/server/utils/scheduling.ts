@@ -1,6 +1,7 @@
 import {
   AppointmentStatus,
   AvailabilityExceptionType,
+  AvailabilityRuleKind,
   CustomerSource,
   type Prisma,
 } from "@prisma/client";
@@ -193,6 +194,41 @@ function compareTimes(left: string, right: string): number {
   return left.localeCompare(right);
 }
 
+function ruleCoversWeekday(rule: { weekday: number; weekdays?: number[] }, weekday: number): boolean {
+  const days = rule.weekdays?.length ? rule.weekdays : [rule.weekday];
+  return days.includes(weekday);
+}
+
+function appointmentHitsUnavailable(
+  rules: AvailabilityMatchRule[],
+  start: { date: string; time: string; weekday: number },
+  end: { date: string; time: string },
+): boolean {
+  if (start.date !== end.date) return false;
+  return rules.some((rule) => {
+    if (rule.kind !== AvailabilityRuleKind.unavailable) return false;
+    if (!ruleCoversWeekday(rule, start.weekday)) return false;
+    if (rule.allDay) return true;
+    return compareTimes(start.time, rule.endTime) < 0 && compareTimes(end.time, rule.startTime) > 0;
+  });
+}
+
+function appointmentFitsAvailable(
+  rules: AvailabilityMatchRule[],
+  start: { date: string; time: string; weekday: number },
+  end: { date: string; time: string },
+): boolean {
+  const available = rules.filter((rule) => rule.kind !== AvailabilityRuleKind.unavailable);
+  if (!available.length) return true;
+  if (start.date !== end.date) return false;
+  return available.some(
+    (rule) =>
+      ruleCoversWeekday(rule, start.weekday) &&
+      (rule.allDay ||
+        (compareTimes(start.time, rule.startTime) >= 0 && compareTimes(end.time, rule.endTime) <= 0)),
+  );
+}
+
 function normalizeTime(value: unknown, field: string): string {
   if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) {
     throwValidation(`${field} muss im Format HH:mm sein`, { field });
@@ -257,21 +293,54 @@ function toCustomerDto(row: Prisma.CustomerGetPayload<{ select: typeof customerS
   };
 }
 
+const availabilityRuleSelect = {
+  id: true,
+  tenantId: true,
+  teacherId: true,
+  weekday: true,
+  weekdays: true,
+  startTime: true,
+  endTime: true,
+  kind: true,
+  allDay: true,
+  locationId: true,
+  activityTags: true,
+  priority: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+type AvailabilityMatchRule = {
+  weekday: number;
+  weekdays: number[];
+  startTime: string;
+  endTime: string;
+  kind: AvailabilityRuleKind;
+  allDay: boolean;
+  priority?: number;
+};
+
 function toRuleDto(row: {
   id: string;
   tenantId: string;
   teacherId: string;
   weekday: number;
+  weekdays: number[];
   startTime: string;
   endTime: string;
+  kind: AvailabilityRuleKind;
+  allDay: boolean;
   locationId: string | null;
   activityTags: Prisma.JsonValue | null;
   priority: number;
   createdAt: Date;
   updatedAt: Date;
 }) {
+  const weekdays = [...new Set(row.weekdays.length ? row.weekdays : [row.weekday])].sort((a, b) => a - b);
   return {
     ...row,
+    weekdays,
+    weekday: weekdays[0] ?? row.weekday,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -389,7 +458,7 @@ async function validateTeacherAvailability(
   const [rules, exceptions] = await Promise.all([
     prisma.availabilityRule.findMany({
       where: { tenantId, teacherId, deletedAt: null },
-      select: { weekday: true, startTime: true, endTime: true },
+      select: { weekday: true, weekdays: true, startTime: true, endTime: true, kind: true, allDay: true },
     }),
     prisma.availabilityException.findMany({
       where: { tenantId, teacherId, deletedAt: null },
@@ -419,20 +488,20 @@ async function validateTeacherAvailability(
     });
   }
 
-  if (rules.length === 0) {
+  const extraOpen = exceptionForDay.some((exception) => exception.type === AvailabilityExceptionType.extra_open);
+  if (extraOpen) {
     return;
   }
 
-  const extraOpen = exceptionForDay.some((exception) => exception.type === AvailabilityExceptionType.extra_open);
-  const matchingRule = rules.some(
-    (rule) =>
-      rule.weekday === start.weekday &&
-      start.date === end.date &&
-      compareTimes(start.time, rule.startTime) >= 0 &&
-      compareTimes(end.time, rule.endTime) <= 0,
-  );
+  if (appointmentHitsUnavailable(rules, start, end)) {
+    throwConflict("Lehrer ist in diesem Zeitraum nicht verfügbar", {
+      conflictType: "TEACHER_UNAVAILABLE",
+      reason: "unavailable_rule",
+      teacherId,
+    });
+  }
 
-  if (!matchingRule && !extraOpen) {
+  if (!appointmentFitsAvailable(rules, start, end)) {
     throwConflict("Lehrer ist in diesem Zeitraum nicht verfügbar", {
       conflictType: "TEACHER_UNAVAILABLE",
       teacherId,
@@ -1092,19 +1161,7 @@ export async function listAvailabilityRules(tenantId: string, teacherIdInput: st
   const rows = await prisma.availabilityRule.findMany({
     where: { tenantId, teacherId, deletedAt: null },
     orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
-    select: {
-      id: true,
-      tenantId: true,
-      teacherId: true,
-      weekday: true,
-      startTime: true,
-      endTime: true,
-      locationId: true,
-      activityTags: true,
-      priority: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: availabilityRuleSelect,
   });
   return { data: rows.map(toRuleDto) };
 }
@@ -1133,17 +1190,36 @@ function normalizeWeekdays(body: Record<string, unknown>, partial: boolean): num
   return undefined;
 }
 
+function normalizeRuleKind(value: unknown): AvailabilityRuleKind {
+  if (value === AvailabilityRuleKind.unavailable || value === "unavailable") {
+    return AvailabilityRuleKind.unavailable;
+  }
+  if (value === AvailabilityRuleKind.available || value === "available") {
+    return AvailabilityRuleKind.available;
+  }
+  throwValidation("Art muss available oder unavailable sein", { field: "kind" });
+}
+
 function normalizeRulePayload(rawBody: unknown, partial = false) {
   const body = (rawBody ?? {}) as Record<string, unknown>;
   const weekdays = normalizeWeekdays(body, partial);
   const weekday = weekdays?.[0];
 
-  const startTime = hasOwn(body, "startTime") ? normalizeTime(body.startTime, "startTime") : undefined;
-  const endTime = hasOwn(body, "endTime") ? normalizeTime(body.endTime, "endTime") : undefined;
-  if (!partial && !startTime) {
+  const kind = hasOwn(body, "kind") ? normalizeRuleKind(body.kind) : undefined;
+  const allDay = hasOwn(body, "allDay") ? Boolean(body.allDay) : undefined;
+  const resolvedKind = kind ?? AvailabilityRuleKind.available;
+  const resolvedAllDay = resolvedKind === AvailabilityRuleKind.unavailable && (allDay ?? false);
+
+  let startTime = hasOwn(body, "startTime") ? normalizeTime(body.startTime, "startTime") : undefined;
+  let endTime = hasOwn(body, "endTime") ? normalizeTime(body.endTime, "endTime") : undefined;
+  if (!partial && resolvedAllDay) {
+    startTime = startTime ?? "00:00";
+    endTime = endTime ?? "23:59";
+  }
+  if (!partial && !resolvedAllDay && !startTime) {
     throwValidation("Startzeit ist erforderlich", { field: "startTime" });
   }
-  if (!partial && !endTime) {
+  if (!partial && !resolvedAllDay && !endTime) {
     throwValidation("Endzeit ist erforderlich", { field: "endTime" });
   }
   if (startTime && endTime && compareTimes(startTime, endTime) >= 0) {
@@ -1161,7 +1237,7 @@ function normalizeRulePayload(rawBody: unknown, partial = false) {
     throwValidation("Priorität muss eine ganze Zahl sein", { field: "priority" });
   }
 
-  return { weekday, weekdays, startTime, endTime, locationId, activityTags, priority };
+  return { weekday, weekdays, startTime, endTime, kind, allDay, locationId, activityTags, priority };
 }
 
 export async function createAvailabilityRule(
@@ -1173,38 +1249,25 @@ export async function createAvailabilityRule(
   await requireTeacher(tenantId, teacherId);
   const payload = normalizeRulePayload(rawBody);
   const weekdays = payload.weekdays ?? (payload.weekday !== undefined ? [payload.weekday] : []);
-  const ruleSelect = {
-    id: true,
-    tenantId: true,
-    teacherId: true,
-    weekday: true,
-    startTime: true,
-    endTime: true,
-    locationId: true,
-    activityTags: true,
-    priority: true,
-    createdAt: true,
-    updatedAt: true,
-  } as const;
-
-  const rows = await prisma.$transaction(
-    weekdays.map((weekday) =>
-      prisma.availabilityRule.create({
-        data: {
-          tenantId,
-          teacherId,
-          weekday,
-          startTime: payload.startTime!,
-          endTime: payload.endTime!,
-          locationId: payload.locationId,
-          activityTags: payload.activityTags,
-          priority: payload.priority ?? 0,
-        },
-        select: ruleSelect,
-      }),
-    ),
-  );
-  return { data: rows.map(toRuleDto) };
+  const kind = payload.kind ?? AvailabilityRuleKind.available;
+  const allDay = kind === AvailabilityRuleKind.unavailable && Boolean(payload.allDay);
+  const row = await prisma.availabilityRule.create({
+    data: {
+      tenantId,
+      teacherId,
+      weekday: weekdays[0]!,
+      weekdays,
+      startTime: allDay ? (payload.startTime ?? "00:00") : payload.startTime!,
+      endTime: allDay ? (payload.endTime ?? "23:59") : payload.endTime!,
+      kind,
+      allDay,
+      locationId: payload.locationId,
+      activityTags: payload.activityTags,
+      priority: payload.priority ?? 0,
+    },
+    select: availabilityRuleSelect,
+  });
+  return { data: [toRuleDto(row)] };
 }
 
 export async function patchAvailabilityRule(
@@ -1218,22 +1281,37 @@ export async function patchAvailabilityRule(
   await requireTeacher(tenantId, teacherId);
   const existing = await prisma.availabilityRule.findFirst({
     where: { id: ruleId, tenantId, teacherId, deletedAt: null },
-    select: { id: true, startTime: true, endTime: true },
+    select: {
+      id: true,
+      startTime: true,
+      endTime: true,
+      kind: true,
+      allDay: true,
+      weekdays: true,
+      weekday: true,
+    },
   });
   if (!existing) {
     throwNotFound("Verfügbarkeitsregel nicht gefunden", { ruleId });
   }
   const payload = normalizeRulePayload(rawBody, true);
-  const startTime = payload.startTime ?? existing.startTime;
-  const endTime = payload.endTime ?? existing.endTime;
-  if (compareTimes(startTime, endTime) >= 0) {
+  const kind = payload.kind ?? existing.kind;
+  const allDay = kind === AvailabilityRuleKind.unavailable && (payload.allDay ?? existing.allDay);
+  const startTime = allDay ? (payload.startTime ?? existing.startTime ?? "00:00") : (payload.startTime ?? existing.startTime);
+  const endTime = allDay ? (payload.endTime ?? existing.endTime ?? "23:59") : (payload.endTime ?? existing.endTime);
+  if (!allDay && compareTimes(startTime, endTime) >= 0) {
     throwValidation("Endzeit muss nach der Startzeit liegen", { startTime, endTime });
   }
 
-  const data: Prisma.AvailabilityRuleUncheckedUpdateInput = {};
-  if (payload.weekday !== undefined) data.weekday = payload.weekday;
-  if (payload.startTime !== undefined) data.startTime = payload.startTime;
-  if (payload.endTime !== undefined) data.endTime = payload.endTime;
+  const weekdays = payload.weekdays ?? (existing.weekdays.length ? existing.weekdays : [existing.weekday]);
+  const data: Prisma.AvailabilityRuleUncheckedUpdateInput = {
+    kind,
+    allDay,
+    startTime,
+    endTime,
+    weekdays,
+    weekday: weekdays[0],
+  };
   if (payload.locationId !== undefined) data.locationId = payload.locationId;
   if (payload.activityTags !== undefined) data.activityTags = payload.activityTags;
   if (payload.priority !== undefined) data.priority = payload.priority;
@@ -1241,19 +1319,7 @@ export async function patchAvailabilityRule(
   const row = await prisma.availabilityRule.update({
     where: { id: ruleId },
     data,
-    select: {
-      id: true,
-      tenantId: true,
-      teacherId: true,
-      weekday: true,
-      startTime: true,
-      endTime: true,
-      locationId: true,
-      activityTags: true,
-      priority: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: availabilityRuleSelect,
   });
   return toRuleDto(row);
 }
@@ -1751,7 +1817,7 @@ const slotCheckAppointmentSelect = {
 } satisfies Prisma.AppointmentSelect;
 
 function teacherBlockedByAvailability(
-  rules: { weekday: number; startTime: string; endTime: string }[],
+  rules: AvailabilityMatchRule[],
   exceptions: { type: AvailabilityExceptionType; startsOn: Date; endsOn: Date }[],
   startsAt: Date,
   endsAt: Date,
@@ -1768,16 +1834,11 @@ function teacherBlockedByAvailability(
       exception.type === AvailabilityExceptionType.block,
   );
   if (blocking) return true;
-  if (!rules.length) return false;
-  const extraOpen = exceptionForDay.some((exception) => exception.type === AvailabilityExceptionType.extra_open);
-  const matchingRule = rules.some(
-    (rule) =>
-      rule.weekday === start.weekday &&
-      start.date === end.date &&
-      compareTimes(start.time, rule.startTime) >= 0 &&
-      compareTimes(end.time, rule.endTime) <= 0,
-  );
-  return !matchingRule && !extraOpen;
+  if (exceptionForDay.some((exception) => exception.type === AvailabilityExceptionType.extra_open)) {
+    return false;
+  }
+  if (appointmentHitsUnavailable(rules, start, end)) return true;
+  return !appointmentFitsAvailable(rules, start, end);
 }
 
 function slotIsFree(input: {
@@ -1788,7 +1849,7 @@ function slotIsFree(input: {
   excludeAppointmentId: string;
   nearby: SlotCheckAppointment[];
   resourceCapacity: Map<string, number>;
-  rulesByTeacher: Map<string, { weekday: number; startTime: string; endTime: string }[]>;
+  rulesByTeacher: Map<string, AvailabilityMatchRule[]>;
   exceptionsByTeacher: Map<string, { type: AvailabilityExceptionType; startsOn: Date; endsOn: Date }[]>;
 }) {
   if (input.startsAt.getTime() <= Date.now()) return false;
@@ -1871,8 +1932,11 @@ export async function suggestNextPrioritySlot(
       select: {
         teacherId: true,
         weekday: true,
+        weekdays: true,
         startTime: true,
         endTime: true,
+        kind: true,
+        allDay: true,
         priority: true,
       },
     }),
@@ -1914,22 +1978,23 @@ export async function suggestNextPrioritySlot(
   pushTeacher(tenant?.defaultTeacherId);
   for (const teacher of teachers) pushTeacher(teacher.id);
 
-  const rulesByTeacher = new Map<string, { weekday: number; startTime: string; endTime: string }[]>();
-  const priorityRulesByTeacher = new Map<
-    string,
-    { weekday: number; startTime: string; endTime: string; priority: number }[]
-  >();
+  const rulesByTeacher = new Map<string, AvailabilityMatchRule[]>();
+  const priorityRulesByTeacher = new Map<string, AvailabilityMatchRule[]>();
   for (const rule of rules) {
-    const plain = rulesByTeacher.get(rule.teacherId) ?? [];
-    plain.push({ weekday: rule.weekday, startTime: rule.startTime, endTime: rule.endTime });
-    rulesByTeacher.set(rule.teacherId, plain);
-    const ranked = priorityRulesByTeacher.get(rule.teacherId) ?? [];
-    ranked.push({
+    const mapped: AvailabilityMatchRule = {
       weekday: rule.weekday,
+      weekdays: rule.weekdays.length ? rule.weekdays : [rule.weekday],
       startTime: rule.startTime,
       endTime: rule.endTime,
+      kind: rule.kind,
+      allDay: rule.allDay,
       priority: rule.priority,
-    });
+    };
+    const plain = rulesByTeacher.get(rule.teacherId) ?? [];
+    plain.push(mapped);
+    rulesByTeacher.set(rule.teacherId, plain);
+    const ranked = priorityRulesByTeacher.get(rule.teacherId) ?? [];
+    ranked.push(mapped);
     priorityRulesByTeacher.set(rule.teacherId, ranked);
   }
   const exceptionsByTeacher = new Map<
@@ -1986,13 +2051,29 @@ export async function suggestNextPrioritySlot(
 
   const windowsFor = (teacherId: string, weekday: number, minPriority: number | null) => {
     const teacherRules = priorityRulesByTeacher.get(teacherId) ?? [];
-    if (!teacherRules.length) {
+    if (
+      teacherRules.some(
+        (rule) =>
+          rule.kind === AvailabilityRuleKind.unavailable &&
+          rule.allDay &&
+          ruleCoversWeekday(rule, weekday),
+      )
+    ) {
+      return [];
+    }
+    const available = teacherRules.filter((rule) => rule.kind !== AvailabilityRuleKind.unavailable);
+    if (!available.length) {
       if (minPriority !== null && minPriority !== 0) return [];
       return [{ startTime: "08:00", endTime: "18:00", priority: 0 }];
     }
-    return teacherRules
-      .filter((rule) => rule.weekday === weekday)
+    return available
+      .filter((rule) => ruleCoversWeekday(rule, weekday))
       .filter((rule) => minPriority === null || rule.priority === minPriority)
+      .map((rule) => ({
+        startTime: rule.allDay ? "00:00" : rule.startTime,
+        endTime: rule.allDay ? "23:59" : rule.endTime,
+        priority: rule.priority ?? 0,
+      }))
       .sort((left, right) => right.priority - left.priority || left.startTime.localeCompare(right.startTime));
   };
 
@@ -2014,10 +2095,11 @@ export async function suggestNextPrioritySlot(
     return null;
   };
 
+  const availableRules = rules.filter((rule) => rule.kind !== AvailabilityRuleKind.unavailable);
   const priorities: number[] = [
-    ...new Set(rules.map((rule: { priority: number }) => Number(rule.priority) || 0)),
+    ...new Set(availableRules.map((rule: { priority: number }) => Number(rule.priority) || 0)),
   ].sort((left, right) => right - left);
-  const priorityLevels: Array<number | null> = rules.length ? priorities : [null];
+  const priorityLevels: Array<number | null> = availableRules.length ? priorities : [null];
   const dayCount = input.onDate ? 4 : 15;
 
   for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
@@ -2065,7 +2147,15 @@ export async function suggestAppointmentAlternatives(
     }),
     prisma.availabilityRule.findMany({
       where: { tenantId, deletedAt: null },
-      select: { teacherId: true, weekday: true, startTime: true, endTime: true },
+      select: {
+        teacherId: true,
+        weekday: true,
+        weekdays: true,
+        startTime: true,
+        endTime: true,
+        kind: true,
+        allDay: true,
+      },
     }),
     prisma.availabilityException.findMany({
       where: { tenantId, deletedAt: null },
@@ -2090,10 +2180,17 @@ export async function suggestAppointmentAlternatives(
   const nearby = nearbyRows.map(toSlotCheckAppointment);
   const teacherLabel = tenant?.teacherLabel?.trim() || "Lehrer";
   const resourcesEnabled = tenant?.resourcesEnabled ?? true;
-  const rulesByTeacher = new Map<string, { weekday: number; startTime: string; endTime: string }[]>();
+  const rulesByTeacher = new Map<string, AvailabilityMatchRule[]>();
   for (const rule of rules) {
     const list = rulesByTeacher.get(rule.teacherId) ?? [];
-    list.push({ weekday: rule.weekday, startTime: rule.startTime, endTime: rule.endTime });
+    list.push({
+      weekday: rule.weekday,
+      weekdays: rule.weekdays.length ? rule.weekdays : [rule.weekday],
+      startTime: rule.startTime,
+      endTime: rule.endTime,
+      kind: rule.kind,
+      allDay: rule.allDay,
+    });
     rulesByTeacher.set(rule.teacherId, list);
   }
   const exceptionsByTeacher = new Map<
@@ -2223,8 +2320,25 @@ export async function suggestAppointmentAlternatives(
       const date = addDaysToDateString(startParts.date, dayOffset);
       const weekday = getBusinessParts(fromBusinessDateTime(date, "12:00")).weekday;
       const teacherRules = rulesByTeacher.get(teacher.id) ?? [];
-      const windows = teacherRules.filter((rule) => rule.weekday === weekday);
-      const ranges = windows.length ? windows : [{ startTime: "08:00", endTime: "18:00" }];
+      if (
+        teacherRules.some(
+          (rule) =>
+            rule.kind === AvailabilityRuleKind.unavailable &&
+            rule.allDay &&
+            ruleCoversWeekday(rule, weekday),
+        )
+      ) {
+        continue;
+      }
+      const windows = teacherRules.filter(
+        (rule) => rule.kind !== AvailabilityRuleKind.unavailable && ruleCoversWeekday(rule, weekday),
+      );
+      const ranges = windows.length
+        ? windows.map((rule) => ({
+            startTime: rule.allDay ? "00:00" : rule.startTime,
+            endTime: rule.allDay ? "23:59" : rule.endTime,
+          }))
+        : [{ startTime: "08:00", endTime: "18:00" }];
       for (const range of ranges) {
         const startMin = parseMinutes(range.startTime);
         const endMin = parseMinutes(range.endTime);

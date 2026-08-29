@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
-import { toValue, type MaybeRefOrGetter } from "vue";
-import type { AvelomDevicePermissionStatus } from "@avelom/capacitor-call-hints";
+import type { PermissionState } from "@capacitor/core";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toValue, type MaybeRefOrGetter } from "vue";
+import { AvelomDevice, type AvelomDevicePermissionStatus } from "@avelom/capacitor-call-hints";
 
 const PROMPT_SESSION_KEY = "avelom.device.permissionsPrompted";
 
@@ -9,8 +10,34 @@ const emptyStatus: AvelomDevicePermissionStatus = {
   contacts: "prompt",
 };
 
+function normalizeState(state: string | undefined): PermissionState {
+  const value = String(state ?? "prompt")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  if (value === "granted" || value === "limited") return "granted";
+  if (value === "denied") return "denied";
+  if (value === "prompt-with-rationale") return "prompt-with-rationale";
+  return "prompt";
+}
+
+function normalizeStatus(
+  raw: Partial<AvelomDevicePermissionStatus> | null | undefined,
+): AvelomDevicePermissionStatus {
+  return {
+    microphone: normalizeState(raw?.microphone),
+    contacts: normalizeState(raw?.contacts),
+    notifications: raw?.notifications ? normalizeState(raw.notifications) : undefined,
+  };
+}
+
 function isGranted(state: string | undefined) {
-  return state === "granted" || state === "limited";
+  const value = normalizeState(state);
+  return value === "granted";
+}
+
+export function permissionLabel(granted: boolean) {
+  return granted ? "Erlaubt" : "Nicht erlaubt";
 }
 
 export function useNativePermissions(options?: {
@@ -18,8 +45,11 @@ export function useNativePermissions(options?: {
   needMicrophone?: MaybeRefOrGetter<boolean>;
 }) {
   const open = ref(false);
-  const requesting = ref(false);
-  const status = ref<AvelomDevicePermissionStatus>({ ...emptyStatus });
+  const requesting = useState("avelom.nativePermissions.requesting", () => false);
+  const lastError = useState("avelom.nativePermissions.error", () => "");
+  const status = useState<AvelomDevicePermissionStatus>("avelom.nativePermissions.status", () => ({
+    ...emptyStatus,
+  }));
   const isNative = computed(() => Capacitor.isNativePlatform());
   const needMicrophone = computed(() => toValue(options?.needMicrophone) ?? true);
 
@@ -34,15 +64,10 @@ export function useNativePermissions(options?: {
       (needMicrophone.value && status.value.microphone === "denied"),
   );
 
-  async function plugin() {
-    const { AvelomDevice } = await import("@avelom/capacitor-call-hints");
-    return AvelomDevice;
-  }
-
   async function refreshStatus() {
     if (!Capacitor.isNativePlatform()) return;
     try {
-      status.value = await (await plugin()).checkPermissions();
+      status.value = normalizeStatus(await AvelomDevice.checkPermissions());
     } catch {
       status.value = { ...emptyStatus };
     }
@@ -51,12 +76,18 @@ export function useNativePermissions(options?: {
   async function requestNow() {
     if (!Capacitor.isNativePlatform()) return;
     requesting.value = true;
+    lastError.value = "";
     try {
-      const device = await plugin();
-      status.value = needMicrophone.value
-        ? await device.requestAllPermissions()
-        : await device.requestPermissions({ alias: "contacts" });
+      const result = needMicrophone.value
+        ? await AvelomDevice.requestAllPermissions()
+        : await AvelomDevice.requestPermissions({ alias: "contacts" });
+      status.value = normalizeStatus(result);
+      await refreshStatus();
       if (allGranted.value) open.value = false;
+    } catch (error) {
+      lastError.value =
+        error instanceof Error ? error.message : "Berechtigung konnte nicht angefragt werden.";
+      await refreshStatus();
     } finally {
       requesting.value = false;
     }
@@ -64,12 +95,26 @@ export function useNativePermissions(options?: {
 
   async function openAppSettings() {
     if (!Capacitor.isNativePlatform()) return;
-    await (await plugin()).openAppSettings();
+    lastError.value = "";
+    try {
+      await AvelomDevice.openAppSettings();
+    } catch (error) {
+      lastError.value =
+        error instanceof Error ? error.message : "App-Einstellungen konnten nicht geöffnet werden.";
+    }
+  }
+
+  function onAppVisible() {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    void refreshStatus();
   }
 
   onMounted(async () => {
-    if (!options?.autoPrompt || !Capacitor.isNativePlatform()) return;
+    if (!Capacitor.isNativePlatform()) return;
     await refreshStatus();
+    document.addEventListener("visibilitychange", onAppVisible);
+    window.addEventListener("focus", onAppVisible);
+    if (!options?.autoPrompt) return;
     if (allGranted.value) return;
     if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(PROMPT_SESSION_KEY) === "1") {
       return;
@@ -80,9 +125,16 @@ export function useNativePermissions(options?: {
     await requestNow();
   });
 
+  onBeforeUnmount(() => {
+    if (typeof document === "undefined") return;
+    document.removeEventListener("visibilitychange", onAppVisible);
+    window.removeEventListener("focus", onAppVisible);
+  });
+
   return {
     open,
     requesting,
+    lastError,
     status,
     isNative,
     microphoneGranted,
