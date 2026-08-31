@@ -40,7 +40,7 @@ importers:
 
   apps/mobile-shell:
     dependencies:
-      '@avelom/capacitor-call-hints':
+      '@alpiplan/capacitor-call-hints':
         specifier: workspace:*
         version: link:../../packages/capacitor-call-hints
       '@capacitor-community/contacts':
@@ -65,10 +65,10 @@ importers:
 
   apps/web:
     dependencies:
-      '@avelom/capacitor-call-hints':
+      '@alpiplan/capacitor-call-hints':
         specifier: workspace:*
         version: link:../../packages/capacitor-call-hints
-      '@avelom/device-capabilities':
+      '@alpiplan/device-capabilities':
         specifier: workspace:*
         version: link:../../packages/device-capabilities
       '@capacitor-community/contacts':
@@ -114,7 +114,7 @@ importers:
 
   packages/capacitor-call-hints:
     dependencies:
-      '@avelom/device-capabilities':
+      '@alpiplan/device-capabilities':
         specifier: workspace:*
         version: link:../device-capabilities
     devDependencies:

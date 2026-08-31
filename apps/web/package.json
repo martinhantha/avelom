@@ -1,5 +1,5 @@
 {
-  "name": "@avelom/web",
+  "name": "@alpiplan/web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,8 +9,8 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "@avelom/capacitor-call-hints": "workspace:*",
-    "@avelom/device-capabilities": "workspace:*",
+    "@alpiplan/capacitor-call-hints": "workspace:*",
+    "@alpiplan/device-capabilities": "workspace:*",
     "@capacitor-community/contacts": "^7.0.0",
     "@capacitor/core": "^7.4.3",
     "@nuxt/ui": "^3.0.0",

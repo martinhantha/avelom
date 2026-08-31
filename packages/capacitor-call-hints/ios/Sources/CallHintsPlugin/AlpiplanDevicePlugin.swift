@@ -3,10 +3,10 @@ import Capacitor
 import Contacts
 import UIKit
 
-@objc(AvelomDevicePlugin)
-public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
-    public let identifier = "AvelomDevicePlugin"
-    public let jsName = "AvelomDevice"
+@objc(AlpiplanDevicePlugin)
+public class AlpiplanDevicePlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "AlpiplanDevicePlugin"
+    public let jsName = "AlpiplanDevice"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "checkPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestPermissions", returnType: CAPPluginReturnPromise),
@@ -129,9 +129,9 @@ public class AvelomDevicePlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 let contact = CNMutableContact()
                 let displayName = call.getString("displayName")?.trimmingCharacters(in: .whitespacesAndNewlines)
-                contact.givenName = (displayName?.isEmpty == false) ? displayName! : "Avelom Kontakt"
-                contact.organizationName = call.getString("organization") ?? "Avelom"
-                contact.jobTitle = "Avelom-App"
+                contact.givenName = (displayName?.isEmpty == false) ? displayName! : "Alpiplan Kontakt"
+                contact.organizationName = call.getString("organization") ?? "Alpiplan"
+                contact.jobTitle = "Alpiplan-App"
                 if let note = call.getString("note")?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
                     contact.note = note
                 }

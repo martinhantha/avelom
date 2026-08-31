@@ -5,7 +5,7 @@ import { REMINDER_LEAD_MS } from "~/utils/rome-time";
 
 const LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
 const POLL_MS = 60_000;
-const SHOWN_KEY = "avelom.reminders.shown";
+const SHOWN_KEY = "alpiplan.reminders.shown";
 
 export interface AppointmentReminder {
   id: string;

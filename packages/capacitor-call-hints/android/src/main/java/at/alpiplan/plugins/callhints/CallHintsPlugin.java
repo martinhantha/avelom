@@ -1,4 +1,4 @@
-package at.avelom.plugins.callhints;
+package at.alpiplan.plugins.callhints;
 
 import android.Manifest;
 import android.database.Cursor;
@@ -14,7 +14,6 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.TimeZone;
 
@@ -66,7 +65,6 @@ public class CallHintsPlugin extends Plugin {
                 )
         ) {
             if (cursor != null) {
-                LinkedHashSet<String> seen = new LinkedHashSet<>();
                 int rank = 0;
                 SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
                 iso.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -78,10 +76,9 @@ public class CallHintsPlugin extends Plugin {
                     }
                     String raw = number.trim();
                     String normalized = raw.replaceAll("[^+0-9]", "");
-                    if (normalized.isEmpty() || seen.contains(normalized)) {
+                    if (normalized.isEmpty()) {
                         continue;
                     }
-                    seen.add(normalized);
 
                     JSObject hint = new JSObject();
                     hint.put("raw", raw);

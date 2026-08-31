@@ -6,11 +6,11 @@ if (!existsSync(plistPath)) process.exit(0);
 
 const stringKeys = {
   NSContactsUsageDescription:
-    "Avelom speichert oder liest Kontakte nur, wenn du das ausdrücklich auslöst.",
+    "Alpiplan speichert oder liest Kontakte nur, wenn du das ausdrücklich auslöst.",
   NSMicrophoneUsageDescription:
-    "Avelom nutzt das Mikrofon nur für die Sprachaufnahme in der Schnellerfassung.",
+    "Alpiplan nutzt das Mikrofon nur für die Sprachaufnahme in der Schnellerfassung.",
   NSSpeechRecognitionUsageDescription:
-    "Avelom wandelt deine Sprache in Text um, um Termine vorzubereiten.",
+    "Alpiplan wandelt deine Sprache in Text um, um Termine vorzubereiten.",
 };
 
 function escapeXml(value) {

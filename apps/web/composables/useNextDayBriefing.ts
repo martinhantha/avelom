@@ -11,7 +11,7 @@ import {
 } from "~/utils/rome-time";
 
 const POLL_MS = 60_000;
-const SHOWN_KEY = "avelom.briefing.shown";
+const SHOWN_KEY = "alpiplan.briefing.shown";
 
 export interface NextDayBriefingItem {
   id: string;

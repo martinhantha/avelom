@@ -10,7 +10,7 @@ type CachedAccess = { token: string; expiresAt: number };
 type FirebaseConfig = { projectId: string; clientEmail: string; privateKey: string };
 
 const globalForFcm = globalThis as typeof globalThis & {
-  avelomFcmAccess?: CachedAccess;
+  alpiplanFcmAccess?: CachedAccess;
 };
 
 function parseServiceAccount(raw: string): FirebaseConfig | null {
@@ -70,7 +70,7 @@ export function isFirebasePushConfigured(): boolean {
 async function firebaseAccessToken(): Promise<string | null> {
   const config = firebaseConfig();
   if (!config) return null;
-  const cached = globalForFcm.avelomFcmAccess;
+  const cached = globalForFcm.alpiplanFcmAccess;
   if (cached && cached.expiresAt > Date.now() + 30_000) {
     return cached.token;
   }
@@ -100,7 +100,7 @@ async function firebaseAccessToken(): Promise<string | null> {
     }
     const payload = (await response.json()) as { access_token?: string; expires_in?: number };
     if (!payload.access_token) return null;
-    globalForFcm.avelomFcmAccess = {
+    globalForFcm.alpiplanFcmAccess = {
       token: payload.access_token,
       expiresAt: Date.now() + Math.max(60, Number(payload.expires_in) || 3600) * 1000,
     };
@@ -136,7 +136,7 @@ async function sendFcmMessage(
             android: {
               priority: "HIGH",
               notification: {
-                channelId: "avelom_appointments",
+                channelId: "alpiplan_appointments",
                 notificationCount: 1,
               },
             },

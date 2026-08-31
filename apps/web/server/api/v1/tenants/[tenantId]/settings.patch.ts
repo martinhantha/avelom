@@ -13,6 +13,8 @@ const TENANT_SETTINGS_SELECT = {
   teacherLabel: true,
   resourcesEnabled: true,
   speechRecognitionEnabled: true,
+  autoCompleteAppointments: true,
+  autoCompleteAfterMinutes: true,
 } as const;
 
 function normalizeTeacherLabel(value: unknown): string {
@@ -36,6 +38,8 @@ export default defineEventHandler(async (event) => {
       teacherLabel?: string;
       resourcesEnabled?: boolean;
       speechRecognitionEnabled?: boolean;
+      autoCompleteAppointments?: boolean;
+      autoCompleteAfterMinutes?: number;
     }>(event)) ?? {};
 
   const data: {
@@ -45,6 +49,8 @@ export default defineEventHandler(async (event) => {
     teacherLabel?: string;
     resourcesEnabled?: boolean;
     speechRecognitionEnabled?: boolean;
+    autoCompleteAppointments?: boolean;
+    autoCompleteAfterMinutes?: number;
   } = {};
   if (typeof body.useDefaultDuration === "boolean") {
     data.useDefaultDuration = body.useDefaultDuration;
@@ -54,6 +60,16 @@ export default defineEventHandler(async (event) => {
   }
   if (typeof body.speechRecognitionEnabled === "boolean") {
     data.speechRecognitionEnabled = body.speechRecognitionEnabled;
+  }
+  if (typeof body.autoCompleteAppointments === "boolean") {
+    data.autoCompleteAppointments = body.autoCompleteAppointments;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "autoCompleteAfterMinutes")) {
+    const minutes = Number(body.autoCompleteAfterMinutes);
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 24 * 60) {
+      throwValidation("Minuten müssen zwischen 0 und 1440 liegen", { field: "autoCompleteAfterMinutes" });
+    }
+    data.autoCompleteAfterMinutes = minutes;
   }
   if (Object.prototype.hasOwnProperty.call(body, "teacherLabel")) {
     data.teacherLabel = normalizeTeacherLabel(body.teacherLabel);

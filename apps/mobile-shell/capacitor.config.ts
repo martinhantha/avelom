@@ -30,8 +30,8 @@ loadEnvFile(resolve(process.cwd(), ".env"));
 const serverUrl = process.env.CAPACITOR_SERVER_URL?.replace(/\/+$/, "");
 
 const config: CapacitorConfig = {
-  appId: "at.avelom.app",
-  appName: "Avelom",
+  appId: "at.alpiplan.app",
+  appName: "Alpiplan",
   webDir: "www",
   server: serverUrl
     ? {

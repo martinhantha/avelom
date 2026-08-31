@@ -1,18 +1,18 @@
 import type { ContactWritePayload } from "./types.js";
 
-export const AVELOM_CONTACT_ORGANIZATION = "Avelom";
-export const AVELOM_CONTACT_NOTE = "Gespeichert aus der Avelom-App";
+export const ALPIPLAN_CONTACT_ORGANIZATION = "Alpiplan";
+export const ALPIPLAN_CONTACT_NOTE = "Gespeichert aus der Alpiplan-App";
 
-export function withAvelomContactMeta(payload: ContactWritePayload): ContactWritePayload {
+export function withAlpiplanContactMeta(payload: ContactWritePayload): ContactWritePayload {
   const existing = payload.note?.trim();
   const noteParts = new Set<string>();
-  if (existing && existing !== AVELOM_CONTACT_ORGANIZATION && existing !== AVELOM_CONTACT_NOTE) {
+  if (existing && existing !== ALPIPLAN_CONTACT_ORGANIZATION && existing !== ALPIPLAN_CONTACT_NOTE) {
     noteParts.add(existing);
   }
-  noteParts.add(AVELOM_CONTACT_NOTE);
+  noteParts.add(ALPIPLAN_CONTACT_NOTE);
   return {
     ...payload,
-    organization: payload.organization?.trim() || AVELOM_CONTACT_ORGANIZATION,
+    organization: payload.organization?.trim() || ALPIPLAN_CONTACT_ORGANIZATION,
     note: [...noteParts].join("\n"),
   };
 }

@@ -1,4 +1,4 @@
-import { WebDeviceCapabilities, persistCallHintsOptIn, type DeviceCapabilities } from "@avelom/device-capabilities";
+import { WebDeviceCapabilities, persistCallHintsOptIn, type DeviceCapabilities } from "@alpiplan/device-capabilities";
 
 const fallback = new WebDeviceCapabilities();
 const sharedDevice = shallowRef<DeviceCapabilities>(fallback);

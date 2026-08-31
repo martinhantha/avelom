@@ -243,7 +243,7 @@ onMounted(() => {
   <UContainer class="py-6 space-y-6 max-w-3xl">
     <div class="flex items-start justify-between gap-3 flex-wrap">
       <div class="space-y-1">
-        <p class="text-sm text-muted font-medium">Avelom · Konflikte</p>
+        <p class="text-sm text-muted font-medium">Alpiplan · Konflikte</p>
         <h1 class="text-2xl font-semibold tracking-tight">Konflikte</h1>
         <p class="text-sm text-neutral-600 dark:text-neutral-400">
           Überschneidungen bei {{ teacherLabel }} oder Ressourcen. Wähle eine Alternative, um den Termin zu verschieben.

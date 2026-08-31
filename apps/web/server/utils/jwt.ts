@@ -27,7 +27,7 @@ function getSecret(): Uint8Array {
     if (process.env.NODE_ENV === "production") {
       throw new Error("JWT_SECRET must be set (min. 16 characters) in production");
     }
-    return new TextEncoder().encode("avelom-dev-only-change-me");
+    return new TextEncoder().encode("alpiplan-dev-only-change-me");
   }
   return new TextEncoder().encode(raw);
 }

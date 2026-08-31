@@ -1,8 +1,8 @@
 import { WebPlugin } from "@capacitor/core";
-import type { CallHint } from "@avelom/device-capabilities";
+import type { CallHint } from "@alpiplan/device-capabilities";
 import type {
-  AvelomDevicePermissionStatus,
-  AvelomDevicePlugin,
+  AlpiplanDevicePermissionStatus,
+  AlpiplanDevicePlugin,
   CallHintsPlugin,
   CallHintsPermissionStatus,
 } from "./definitions";
@@ -21,29 +21,29 @@ export class CallHintsWeb extends WebPlugin implements CallHintsPlugin {
   }
 }
 
-export class AvelomDeviceWeb extends WebPlugin implements AvelomDevicePlugin {
-  async checkPermissions(): Promise<AvelomDevicePermissionStatus> {
+export class AlpiplanDeviceWeb extends WebPlugin implements AlpiplanDevicePlugin {
+  async checkPermissions(): Promise<AlpiplanDevicePermissionStatus> {
     return {
       microphone: await this.microphoneState(),
       contacts: "prompt",
     };
   }
 
-  async requestPermissions(): Promise<AvelomDevicePermissionStatus> {
+  async requestPermissions(): Promise<AlpiplanDevicePermissionStatus> {
     return this.requestAllPermissions();
   }
 
-  async requestMicrophone(): Promise<AvelomDevicePermissionStatus> {
+  async requestMicrophone(): Promise<AlpiplanDevicePermissionStatus> {
     await this.promptMicrophone();
     return this.checkPermissions();
   }
 
-  async requestAllPermissions(): Promise<AvelomDevicePermissionStatus> {
+  async requestAllPermissions(): Promise<AlpiplanDevicePermissionStatus> {
     await this.promptMicrophone();
     return this.checkPermissions();
   }
 
-  private async microphoneState(): Promise<AvelomDevicePermissionStatus["microphone"]> {
+  private async microphoneState(): Promise<AlpiplanDevicePermissionStatus["microphone"]> {
     try {
       const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
       if (result.state === "granted") return "granted";

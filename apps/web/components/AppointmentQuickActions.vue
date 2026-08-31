@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Capacitor } from "@capacitor/core";
-import { AvelomDevice } from "@avelom/capacitor-call-hints";
+import { AlpiplanDevice } from "@alpiplan/capacitor-call-hints";
 import { computed, ref } from "vue";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import { useDeviceContactLookup } from "../composables/useDeviceContactLookup";
@@ -55,7 +55,7 @@ async function onWhatsAppClick(event: Event) {
   event.preventDefault();
   if (!phone.value) return;
   try {
-    await AvelomDevice.openWhatsApp({ phone: phone.value, app: "business" });
+    await AlpiplanDevice.openWhatsApp({ phone: phone.value, app: "business" });
   } catch {
     // WhatsApp Business missing or native plugin not yet rebuilt.
   }

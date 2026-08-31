@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: avelom
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-avelom_dev_change_me}
-      POSTGRES_DB: avelom
+      POSTGRES_USER: alpiplan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alpiplan_dev_change_me}
+      POSTGRES_DB: alpiplan
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U avelom -d avelom"]
+      test: ["CMD-SHELL", "pg_isready -U alpiplan -d alpiplan"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -31,7 +31,7 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
-      DATABASE_URL: postgresql://avelom:${POSTGRES_PASSWORD:-avelom_dev_change_me}@postgres:5432/avelom?schema=public
+      DATABASE_URL: postgresql://alpiplan:${POSTGRES_PASSWORD:-alpiplan_dev_change_me}@postgres:5432/alpiplan?schema=public
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-16-chars}
       REDIS_URL: redis://redis:6379
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
@@ -49,7 +49,7 @@ services:
       dockerfile: Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://avelom:${POSTGRES_PASSWORD:-avelom_dev_change_me}@postgres:5432/avelom?schema=public
+      DATABASE_URL: postgresql://alpiplan:${POSTGRES_PASSWORD:-alpiplan_dev_change_me}@postgres:5432/alpiplan?schema=public
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
@@ -64,9 +64,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_DB: avelom
-      POSTGRES_USER: avelom
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-avelom_dev_change_me}
+      POSTGRES_DB: alpiplan
+      POSTGRES_USER: alpiplan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alpiplan_dev_change_me}
       SCHEDULE: "@daily"
       BACKUP_DIR: /backups
       BACKUP_KEEP_DAYS: 7

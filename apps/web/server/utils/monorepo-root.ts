@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Repo-Root (…/avelom), ausgehend von `server/utils`. */
+/** Repo-Root, ausgehend von `server/utils`. */
 export function getMonorepoRoot(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   return resolve(here, "../../../..");

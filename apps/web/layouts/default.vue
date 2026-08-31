@@ -29,7 +29,7 @@ const links = computed(() => {
     >
       <div class="flex w-full h-dvh max-h-dvh flex-col p-4 gap-4 overflow-hidden">
         <div class="px-2 pt-2 shrink-0">
-          <NuxtLink to="/" class="inline-flex items-center" aria-label="Avelom">
+          <NuxtLink to="/" class="inline-flex items-center" aria-label="Alpiplan">
             <AppLogo class="h-8" />
           </NuxtLink>
           <p class="mt-1 text-xs text-neutral-500">Dashboard</p>
@@ -76,7 +76,7 @@ const links = computed(() => {
       <div class="min-w-0 flex-1">
         <header class="sticky top-0 z-10 border-b border-neutral-200 dark:border-neutral-800 bg-white/85 dark:bg-neutral-950/85 backdrop-blur lg:hidden pt-[var(--app-safe-top)]">
           <div class="px-4 py-3 flex items-center justify-between gap-3">
-            <NuxtLink to="/" class="inline-flex items-center min-w-0" aria-label="Avelom">
+            <NuxtLink to="/" class="inline-flex items-center min-w-0" aria-label="Alpiplan">
               <AppLogo class="h-7" />
             </NuxtLink>
             <div class="flex items-center gap-2">

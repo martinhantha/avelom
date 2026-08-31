@@ -1,4 +1,4 @@
-# Datenmodell — Avelom / ogama
+# Datenmodell — Alpiplan / ogama
 
 Siehe ausführliches Prisma-Schema: [`../prisma/schema.prisma`](../prisma/schema.prisma).
 

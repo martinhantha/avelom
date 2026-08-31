@@ -3,23 +3,23 @@ import { runScheduledPushTick } from "~/server/utils/scheduled-push";
 const TICK_MS = 15_000;
 
 const globalForSched = globalThis as typeof globalThis & {
-  avelomScheduledPushTimer?: ReturnType<typeof setInterval>;
+  alpiplanScheduledPushTimer?: ReturnType<typeof setInterval>;
 };
 
 export default defineNitroPlugin((nitro) => {
   if (import.meta.prerender) return;
-  if (globalForSched.avelomScheduledPushTimer) return;
+  if (globalForSched.alpiplanScheduledPushTimer) return;
 
   console.info("[push] scheduled reminder/briefing ticker started");
   void runScheduledPushTick();
-  globalForSched.avelomScheduledPushTimer = setInterval(() => {
+  globalForSched.alpiplanScheduledPushTimer = setInterval(() => {
     void runScheduledPushTick();
   }, TICK_MS);
 
   nitro.hooks.hook("close", () => {
-    if (globalForSched.avelomScheduledPushTimer) {
-      clearInterval(globalForSched.avelomScheduledPushTimer);
-      globalForSched.avelomScheduledPushTimer = undefined;
+    if (globalForSched.alpiplanScheduledPushTimer) {
+      clearInterval(globalForSched.alpiplanScheduledPushTimer);
+      globalForSched.alpiplanScheduledPushTimer = undefined;
     }
   });
 });

@@ -1,4 +1,4 @@
-import { withAvelomContactMeta } from "./contact-meta.js";
+import { withAlpiplanContactMeta } from "./contact-meta.js";
 import type { ContactWritePayload } from "./types.js";
 
 function escapeVCard(value: string): string {
@@ -6,13 +6,13 @@ function escapeVCard(value: string): string {
 }
 
 export function toVCard(payload: ContactWritePayload): string {
-  const labeled = withAvelomContactMeta(payload);
+  const labeled = withAlpiplanContactMeta(payload);
   const lines = [
     "BEGIN:VCARD",
     "VERSION:3.0",
     `FN:${escapeVCard(labeled.displayName)}`,
-    `ORG:${escapeVCard(labeled.organization ?? "Avelom")}`,
-    "CATEGORIES:Avelom",
+    `ORG:${escapeVCard(labeled.organization ?? "Alpiplan")}`,
+    "CATEGORIES:Alpiplan",
   ];
   if (labeled.phoneE164?.trim()) {
     lines.push(`TEL;TYPE=CELL:${escapeVCard(labeled.phoneE164.trim())}`);

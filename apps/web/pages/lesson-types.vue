@@ -152,7 +152,7 @@ watch(() => primaryTenant.value?.tenantId, load);
   <UContainer class="py-8 space-y-5">
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <div>
-        <p class="text-sm text-muted font-medium">Avelom · Termintypen</p>
+        <p class="text-sm text-muted font-medium">Alpiplan · Termintypen</p>
         <h1 class="text-2xl font-semibold tracking-tight">
           Termintypen
           <span class="ml-2 text-sm font-normal text-neutral-500">({{ filtered.length }})</span>

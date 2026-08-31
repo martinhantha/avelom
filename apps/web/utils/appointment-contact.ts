@@ -78,7 +78,7 @@ export function isAssignedTeacher(
 }
 
 export function resolveAppointmentDisplayName(appointment: AppointmentContactSource): string {
-  return firstNonEmpty(appointment.customer?.displayName, appointment.appointmentContactText) || "Avelom Kontakt";
+  return firstNonEmpty(appointment.customer?.displayName, appointment.appointmentContactText) || "Alpiplan Kontakt";
 }
 
 export function resolveAppointmentPhone(appointment: AppointmentContactSource): string | null {

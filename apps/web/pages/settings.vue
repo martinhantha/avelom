@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
-import { isCallHintsOptIn } from "@avelom/device-capabilities";
+import { isCallHintsOptIn } from "@alpiplan/device-capabilities";
 import { useWhatsAppPreference } from "../composables/useWhatsAppPreference";
 import type { SuperadminOverview, TenantRole } from "../types/superadmin";
 
@@ -68,6 +68,8 @@ const tenantSettingsSaving = ref(false);
 const useDefaultDurationLocal = ref(true);
 const resourcesEnabledLocal = ref(true);
 const speechRecognitionEnabledLocal = ref(false);
+const autoCompleteAppointmentsLocal = ref(false);
+const autoCompleteAfterMinutesLocal = ref(0);
 const teacherLabelLocal = ref("Lehrer");
 const defaultTeacherIdLocal = ref("");
 const lastSavedDefaultTeacherId = ref("");
@@ -95,6 +97,20 @@ watch(
   { immediate: true },
 );
 watch(
+  () => primaryTenant.value?.autoCompleteAppointments,
+  (v) => {
+    autoCompleteAppointmentsLocal.value = v ?? false;
+  },
+  { immediate: true },
+);
+watch(
+  () => primaryTenant.value?.autoCompleteAfterMinutes,
+  (v) => {
+    autoCompleteAfterMinutesLocal.value = typeof v === "number" ? v : 0;
+  },
+  { immediate: true },
+);
+watch(
   () => primaryTenant.value?.teacherLabel,
   (v) => {
     teacherLabelLocal.value = v?.trim() || "Lehrer";
@@ -109,6 +125,8 @@ async function saveTenantSettings(patch: {
   teacherLabel?: string;
   resourcesEnabled?: boolean;
   speechRecognitionEnabled?: boolean;
+  autoCompleteAppointments?: boolean;
+  autoCompleteAfterMinutes?: number;
 }) {
   if (!primaryTenant.value?.tenantId) return;
   tenantSettingsSaving.value = true;
@@ -120,6 +138,8 @@ async function saveTenantSettings(patch: {
       teacherLabel: string;
       resourcesEnabled: boolean;
       speechRecognitionEnabled: boolean;
+      autoCompleteAppointments: boolean;
+      autoCompleteAfterMinutes: number;
     }>(`/api/v1/tenants/${primaryTenant.value.tenantId}/settings`, {
       method: "PATCH",
       credentials: "include",
@@ -133,6 +153,12 @@ async function saveTenantSettings(patch: {
     }
     if (typeof saved.speechRecognitionEnabled === "boolean") {
       speechRecognitionEnabledLocal.value = saved.speechRecognitionEnabled;
+    }
+    if (typeof saved.autoCompleteAppointments === "boolean") {
+      autoCompleteAppointmentsLocal.value = saved.autoCompleteAppointments;
+    }
+    if (typeof saved.autoCompleteAfterMinutes === "number") {
+      autoCompleteAfterMinutesLocal.value = saved.autoCompleteAfterMinutes;
     }
     if (typeof saved.teacherLabel === "string") {
       teacherLabelLocal.value = saved.teacherLabel;
@@ -153,6 +179,8 @@ async function saveTenantSettings(patch: {
     useDefaultDurationLocal.value = primaryTenant.value?.useDefaultDuration ?? true;
     resourcesEnabledLocal.value = primaryTenant.value?.resourcesEnabled ?? true;
     speechRecognitionEnabledLocal.value = primaryTenant.value?.speechRecognitionEnabled ?? false;
+    autoCompleteAppointmentsLocal.value = primaryTenant.value?.autoCompleteAppointments ?? false;
+    autoCompleteAfterMinutesLocal.value = primaryTenant.value?.autoCompleteAfterMinutes ?? 0;
     teacherLabelLocal.value = primaryTenant.value?.teacherLabel?.trim() || "Lehrer";
     defaultTeacherIdLocal.value = lastSavedDefaultTeacherId.value;
     defaultLessonTypeIdLocal.value = lastSavedDefaultLessonTypeId.value;
@@ -683,7 +711,7 @@ onMounted(() => {
 <template>
   <UContainer class="py-8 space-y-6">
     <div class="space-y-2">
-      <p class="text-sm text-muted font-medium">Avelom · Settings</p>
+      <p class="text-sm text-muted font-medium">Alpiplan · Settings</p>
       <h1 class="text-2xl font-semibold tracking-tight">Einstellungen</h1>
       <p class="text-sm text-neutral-600 dark:text-neutral-400">
         Account und Gerät
@@ -788,7 +816,7 @@ onMounted(() => {
             <p class="text-xs text-neutral-500">
               <template v-if="speechRecognitionEnabled">Spracheingabe und Adressbuch. </template>
               <template v-else>Adressbuch. </template>
-              Kontakte werden lokal unter „Avelom“ gespeichert, nicht im Google-Konto.
+              Kontakte werden lokal unter „Alpiplan“ gespeichert, nicht im Google-Konto.
             </p>
             <ul class="text-sm space-y-1">
               <li v-if="speechRecognitionEnabled" class="flex items-center justify-between gap-3">
@@ -922,6 +950,49 @@ onMounted(() => {
                 () => {
                   speechRecognitionEnabledLocal = !speechRecognitionEnabledLocal;
                   saveTenantSettings({ speechRecognitionEnabled: speechRecognitionEnabledLocal });
+                }
+              "
+            />
+            <div class="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 dark:bg-neutral-700 dark:after:bg-neutral-200" />
+          </label>
+        </div>
+
+        <div class="flex items-start justify-between gap-4 mt-6 pt-4 border-t border-neutral-200 dark:border-neutral-800">
+          <div class="text-sm min-w-0">
+            <p class="font-medium">Termine automatisch als erledigt markieren</p>
+            <p class="text-xs text-neutral-500 mt-1">
+              Gilt für alle Benutzer. Offene Termine werden erledigt, sobald das Ende plus die angegebene Zeit vorbei ist.
+            </p>
+            <UFormField
+              v-if="autoCompleteAppointmentsLocal"
+              label="Minuten nach Terminende"
+              class="mt-3 max-w-xs"
+            >
+              <UInput
+                v-model.number="autoCompleteAfterMinutesLocal"
+                type="number"
+                min="0"
+                max="1440"
+                :disabled="!canEdit || tenantSettingsSaving"
+                @blur="
+                  saveTenantSettings({
+                    autoCompleteAppointments: true,
+                    autoCompleteAfterMinutes: Math.max(0, Math.min(1440, Number(autoCompleteAfterMinutesLocal) || 0)),
+                  })
+                "
+              />
+            </UFormField>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+            <input
+              type="checkbox"
+              class="sr-only peer"
+              :checked="autoCompleteAppointmentsLocal"
+              :disabled="!canEdit || tenantSettingsSaving"
+              @change="
+                () => {
+                  autoCompleteAppointmentsLocal = !autoCompleteAppointmentsLocal;
+                  saveTenantSettings({ autoCompleteAppointments: autoCompleteAppointmentsLocal });
                 }
               "
             />

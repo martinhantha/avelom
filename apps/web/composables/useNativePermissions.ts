@@ -1,11 +1,11 @@
 import { Capacitor } from "@capacitor/core";
 import type { PermissionState } from "@capacitor/core";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toValue, type MaybeRefOrGetter } from "vue";
-import { AvelomDevice, type AvelomDevicePermissionStatus } from "@avelom/capacitor-call-hints";
+import { AlpiplanDevice, type AlpiplanDevicePermissionStatus } from "@alpiplan/capacitor-call-hints";
 
-const PROMPT_SESSION_KEY = "avelom.device.permissionsPrompted";
+const PROMPT_SESSION_KEY = "alpiplan.device.permissionsPrompted";
 
-const emptyStatus: AvelomDevicePermissionStatus = {
+const emptyStatus: AlpiplanDevicePermissionStatus = {
   microphone: "prompt",
   contacts: "prompt",
 };
@@ -22,8 +22,8 @@ function normalizeState(state: string | undefined): PermissionState {
 }
 
 function normalizeStatus(
-  raw: Partial<AvelomDevicePermissionStatus> | null | undefined,
-): AvelomDevicePermissionStatus {
+  raw: Partial<AlpiplanDevicePermissionStatus> | null | undefined,
+): AlpiplanDevicePermissionStatus {
   return {
     microphone: normalizeState(raw?.microphone),
     contacts: normalizeState(raw?.contacts),
@@ -45,9 +45,9 @@ export function useNativePermissions(options?: {
   needMicrophone?: MaybeRefOrGetter<boolean>;
 }) {
   const open = ref(false);
-  const requesting = useState("avelom.nativePermissions.requesting", () => false);
-  const lastError = useState("avelom.nativePermissions.error", () => "");
-  const status = useState<AvelomDevicePermissionStatus>("avelom.nativePermissions.status", () => ({
+  const requesting = useState("alpiplan.nativePermissions.requesting", () => false);
+  const lastError = useState("alpiplan.nativePermissions.error", () => "");
+  const status = useState<AlpiplanDevicePermissionStatus>("alpiplan.nativePermissions.status", () => ({
     ...emptyStatus,
   }));
   const isNative = computed(() => Capacitor.isNativePlatform());
@@ -67,7 +67,7 @@ export function useNativePermissions(options?: {
   async function refreshStatus() {
     if (!Capacitor.isNativePlatform()) return;
     try {
-      status.value = normalizeStatus(await AvelomDevice.checkPermissions());
+      status.value = normalizeStatus(await AlpiplanDevice.checkPermissions());
     } catch {
       status.value = { ...emptyStatus };
     }
@@ -79,8 +79,8 @@ export function useNativePermissions(options?: {
     lastError.value = "";
     try {
       const result = needMicrophone.value
-        ? await AvelomDevice.requestAllPermissions()
-        : await AvelomDevice.requestPermissions({ alias: "contacts" });
+        ? await AlpiplanDevice.requestAllPermissions()
+        : await AlpiplanDevice.requestPermissions({ alias: "contacts" });
       status.value = normalizeStatus(result);
       await refreshStatus();
       if (allGranted.value) open.value = false;
@@ -97,7 +97,7 @@ export function useNativePermissions(options?: {
     if (!Capacitor.isNativePlatform()) return;
     lastError.value = "";
     try {
-      await AvelomDevice.openAppSettings();
+      await AlpiplanDevice.openAppSettings();
     } catch (error) {
       lastError.value =
         error instanceof Error ? error.message : "App-Einstellungen konnten nicht geöffnet werden.";

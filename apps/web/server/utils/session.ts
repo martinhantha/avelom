@@ -17,6 +17,8 @@ export async function loadUserWithMemberships(userId: string) {
               teacherLabel: true,
               resourcesEnabled: true,
               speechRecognitionEnabled: true,
+              autoCompleteAppointments: true,
+              autoCompleteAfterMinutes: true,
             },
           },
           teacherProfile: { select: { id: true, deletedAt: true } },
@@ -44,6 +46,8 @@ export function toAuthSession(user: NonNullable<Awaited<ReturnType<typeof loadUs
       teacherLabel: m.tenant.teacherLabel?.trim() || "Lehrer",
       resourcesEnabled: m.tenant.resourcesEnabled,
       speechRecognitionEnabled: m.tenant.speechRecognitionEnabled,
+      autoCompleteAppointments: m.tenant.autoCompleteAppointments,
+      autoCompleteAfterMinutes: m.tenant.autoCompleteAfterMinutes,
       teacherProfileId: m.teacherProfile?.deletedAt ? null : m.teacherProfile?.id ?? null,
     })),
   };

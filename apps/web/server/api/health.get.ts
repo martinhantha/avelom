@@ -4,6 +4,6 @@ export default defineEventHandler(() => {
   void runScheduledPushTick();
   return {
     ok: true as const,
-    service: "avelom-web",
+    service: "alpiplan-web",
   };
 });

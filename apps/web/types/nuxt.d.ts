@@ -1,4 +1,4 @@
-import type { DeviceCapabilities } from "@avelom/device-capabilities";
+import type { DeviceCapabilities } from "@alpiplan/device-capabilities";
 
 declare module "nuxt/schema" {
   interface RuntimeConfig {

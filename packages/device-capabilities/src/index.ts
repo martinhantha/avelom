@@ -4,9 +4,9 @@ export { WebDeviceCapabilities } from "./web.js";
 export { AndroidCallHintCapabilities } from "./android-call-hints.js";
 export { toVCard, downloadVCard } from "./vcard.js";
 export {
-  AVELOM_CONTACT_NOTE,
-  AVELOM_CONTACT_ORGANIZATION,
-  withAvelomContactMeta,
+  ALPIPLAN_CONTACT_NOTE,
+  ALPIPLAN_CONTACT_ORGANIZATION,
+  withAlpiplanContactMeta,
 } from "./contact-meta.js";
 export {
   detectDevicePlatform,

@@ -851,6 +851,14 @@ export async function patchAppointment(
         });
       }
     }
+    const linkedCustomerId = hasOwn(body, "customerId") ? customerId : existing.customerId;
+    const customerName = optionalTrimmedString(body.customerName);
+    if (linkedCustomerId && customerName && customerName.length >= 2) {
+      await tx.customer.update({
+        where: { id: linkedCustomerId },
+        data: { displayName: customerName, version: { increment: 1 } },
+      });
+    }
   });
   const row = await prisma.appointment.findFirst({
     where: { id: appointmentId },

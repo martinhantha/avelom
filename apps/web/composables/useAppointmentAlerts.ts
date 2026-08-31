@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { AvelomDevice } from "@avelom/capacitor-call-hints";
+import { AlpiplanDevice } from "@alpiplan/capacitor-call-hints";
 import {
   APPOINTMENT_LIVE_EVENT,
   type AppointmentLiveEvent,
@@ -37,7 +37,7 @@ function alertCopy(event: AppointmentLiveEvent): { title: string; body: string }
 async function notifyOs(event: AppointmentLiveEvent, title: string, body: string) {
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
     try {
-      await AvelomDevice.showLocalNotification({
+      await AlpiplanDevice.showLocalNotification({
         title,
         body,
         id: `${event.type}:${event.appointmentId}`,

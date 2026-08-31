@@ -23,7 +23,7 @@ const {
     </template>
     <template #body>
       <p class="text-sm text-neutral-600 dark:text-neutral-400">
-        Avelom braucht
+        Alpiplan braucht
         <template v-if="speechRecognitionEnabled">Mikrofon (Spracheingabe) und </template>
         Kontakte (Adressbuch). Die Systemabfrage erscheint sofort.
       </p>

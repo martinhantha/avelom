@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { $fetch } from "ofetch";
-import type { CallHint } from "@avelom/device-capabilities";
-import { isCallHintsOptIn } from "@avelom/device-capabilities";
+import type { CallHint } from "@alpiplan/device-capabilities";
+import { isCallHintsOptIn } from "@alpiplan/device-capabilities";
 import { useAuth } from "../composables/useAuth";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import { useDeviceContactLookup } from "../composables/useDeviceContactLookup";
@@ -524,8 +524,8 @@ const colleagueNames = computed(() => {
     .join(", ");
 });
 
-if (props.appointment?.customer?.displayName) {
-  passengerName.value = props.appointment.customer.displayName;
+if (props.appointment?.customer?.displayName || props.appointment?.appointmentContactText) {
+  passengerName.value = props.appointment.customer?.displayName ?? props.appointment.appointmentContactText ?? "";
 }
 
 const durationOptions = [30, 45, 60, 90, 120];
@@ -570,13 +570,22 @@ function applyCallHint(hint: CallHint) {
   if (phone) form.phone = phone;
 }
 
+function formatCallHintTime(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 async function loadCallHints() {
   if (!device.value.features.callHints || !isCallHintsOptIn()) {
     callHints.value = [];
     return;
   }
   try {
-    callHints.value = await device.value.getRecentCallHints(5);
+    callHints.value = await device.value.getRecentCallHints(2);
   } catch {
     callHints.value = [];
   }
@@ -606,17 +615,17 @@ async function saveDeviceContact() {
   deviceContactHint.value = "";
   try {
     await device.value.saveOrUpdateDeviceContact({
-      displayName: passengerName.value.trim() || text.value.trim() || "Avelom Kontakt",
+      displayName: passengerName.value.trim() || text.value.trim() || "Alpiplan Kontakt",
       phoneE164: form.phone.trim() || undefined,
     });
     await refreshDeviceContact();
     if (device.value.platform === "web") {
       deviceContactHint.value =
-        "vCard heruntergeladen — auf dem Telefon importieren (Organisation: Avelom).";
+        "vCard heruntergeladen — auf dem Telefon importieren (Organisation: Alpiplan).";
     } else if (deviceContactLookup.value.match?.googleSynced) {
       deviceContactHint.value = "Nummer ist schon in Google Kontakte gespeichert.";
     } else {
-      deviceContactHint.value = "Kontakt lokal unter „Avelom“ gespeichert, nicht im Google-Konto.";
+      deviceContactHint.value = "Kontakt lokal unter „Alpiplan“ gespeichert, nicht im Google-Konto.";
     }
   } catch {
     deviceContactHint.value = "Kontakt konnte nicht gespeichert werden.";
@@ -653,7 +662,7 @@ function onCustomerSelect() {
 }
 
 watch(passengerName, (name) => {
-  if (hydratingForm) return;
+  if (hydratingForm || isEditing.value) return;
   const selected = options.value?.customers.find((item) => item.id === form.customerId);
   if (!selected) return;
   if (name.trim() !== selected.displayName) {
@@ -689,7 +698,7 @@ function fillFromAppointment(appointment: AppointmentDto) {
   form.customerId = appointment.customer?.id ?? "";
   form.phone = resolveAppointmentPhone(appointment) ?? "";
   form.note = appointment.unstructuredNote ?? "";
-  passengerName.value = appointment.customer?.displayName ?? "";
+  passengerName.value = appointment.customer?.displayName ?? appointment.appointmentContactText ?? "";
   hydratingForm = false;
 }
 
@@ -848,6 +857,7 @@ async function saveAppointment() {
       lessonTypeId: form.lessonTypeId || null,
       resourceId: resourcesEnabled.value ? form.resourceId || null : undefined,
       customerId: customerId || null,
+      customerName: passengerName.value.trim() || undefined,
       appointmentContactText: text.value,
       appointmentPhoneRaw: phoneValue || null,
       appointmentPhoneE164: phoneValue.startsWith("+") ? phoneValue : null,
@@ -1183,18 +1193,17 @@ onMounted(() => {
               Kontakt
             </UButton>
           </div>
-          <div v-if="callHints.length" class="flex flex-wrap gap-1.5">
-            <UButton
+          <div v-if="callHints.length" class="flex flex-col gap-1">
+            <button
               v-for="hint in callHints"
               :key="`${hint.lastSeenAt}:${hint.e164 || hint.raw}`"
-              size="xs"
-              variant="soft"
-              color="neutral"
-              icon="i-lucide-phone-incoming"
+              type="button"
+              class="w-full rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-1.5 text-left text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800"
               @click="applyCallHint(hint)"
             >
-              {{ hint.e164 || hint.raw }}
-            </UButton>
+              <span class="block truncate">{{ hint.e164 || hint.raw }}</span>
+              <span class="block text-xs text-neutral-500">{{ formatCallHintTime(hint.lastSeenAt) }}</span>
+            </button>
           </div>
           <p v-else-if="showCallHintsOptInHint" class="text-xs text-neutral-500">
             Letzte Anrufe als Vorschlag: in den Einstellungen aktivieren (Android-App).

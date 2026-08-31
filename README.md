@@ -1,8 +1,8 @@
-# Avelom (ogama)
+# Alpiplan (ogama)
 
 Mandantenfähige Planungs- und Stundenerfassungsplattform für Flugschulen, Skischulen und ähnliche Betriebe.
 
-- **Marke:** Avelom · **Projektname:** ogama (siehe [docs/GLOSSARY.md](docs/GLOSSARY.md))
+- **Marke:** Alpiplan · **Projektname:** ogama (siehe [docs/GLOSSARY.md](docs/GLOSSARY.md))
 - **Web + HTTP-API:** [apps/web](apps/web) — Nuxt 4 + Nuxt UI; **Auth & REST v1 laufen im Nitro-Server** (TypeScript). Vertrag: [docs/openapi/openapi.yaml](docs/openapi/openapi.yaml) (Basis-URL z. B. `/api/v1`).
 - **Hintergrundjobs (optional):** [apps/worker](apps/worker) — TypeScript-Placeholder
 - **Datenmodell:** [prisma/schema.prisma](prisma/schema.prisma)

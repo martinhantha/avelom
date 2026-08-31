@@ -1,4 +1,4 @@
-export const APPOINTMENT_LIVE_EVENT = "avelom:appointment-live";
+export const APPOINTMENT_LIVE_EVENT = "alpiplan:appointment-live";
 /** @deprecated Use APPOINTMENT_LIVE_EVENT */
 export const APPOINTMENT_CREATED_EVENT = APPOINTMENT_LIVE_EVENT;
 

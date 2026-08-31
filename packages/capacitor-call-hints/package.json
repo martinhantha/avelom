@@ -1,8 +1,8 @@
 {
-  "name": "@avelom/capacitor-call-hints",
+  "name": "@alpiplan/capacitor-call-hints",
   "version": "0.0.1",
   "private": true,
-  "description": "Android recent-call hints for Avelom. Raw call logs never leave the device.",
+  "description": "Android recent-call hints for Alpiplan. Raw call logs never leave the device.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -18,7 +18,7 @@
     "android/build.gradle",
     "ios/Sources/",
     "src/",
-    "AvelomCapacitorCallHints.podspec",
+    "AlpiplanCapacitorCallHints.podspec",
     "Package.swift"
   ],
   "capacitor": {
@@ -30,7 +30,7 @@
     }
   },
   "dependencies": {
-    "@avelom/device-capabilities": "workspace:*"
+    "@alpiplan/device-capabilities": "workspace:*"
   },
   "peerDependencies": {
     "@capacitor/core": ">=7.0.0"

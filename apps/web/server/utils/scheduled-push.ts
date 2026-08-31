@@ -14,7 +14,7 @@ import {
 } from "~/utils/rome-time";
 
 const globalForSched = globalThis as typeof globalThis & {
-  avelomScheduledPushRunning?: boolean;
+  alpiplanScheduledPushRunning?: boolean;
 };
 
 const reminderAppointmentSelect = {
@@ -266,16 +266,37 @@ async function sendDueBriefings(now: Date): Promise<void> {
   }
 }
 
+async function autoCompleteOverdueAppointments(now: Date): Promise<void> {
+  const tenants = await prisma.tenant.findMany({
+    where: { deletedAt: null, autoCompleteAppointments: true },
+    select: { id: true, autoCompleteAfterMinutes: true },
+  });
+  for (const tenant of tenants) {
+    const cutoff = new Date(now.getTime() - Math.max(0, tenant.autoCompleteAfterMinutes) * 60_000);
+    await prisma.appointment.updateMany({
+      where: {
+        tenantId: tenant.id,
+        deletedAt: null,
+        status: { in: [AppointmentStatus.draft, AppointmentStatus.confirmed] },
+        endsAt: { lte: cutoff },
+      },
+      data: { status: AppointmentStatus.completed },
+    });
+  }
+}
+
 export async function runScheduledPushTick(now = new Date()): Promise<void> {
-  if (globalForSched.avelomScheduledPushRunning) return;
-  if (!isFirebasePushConfigured()) return;
-  globalForSched.avelomScheduledPushRunning = true;
+  if (globalForSched.alpiplanScheduledPushRunning) return;
+  globalForSched.alpiplanScheduledPushRunning = true;
   try {
-    await sendDueReminders(now);
-    await sendDueBriefings(now);
+    await autoCompleteOverdueAppointments(now);
+    if (isFirebasePushConfigured()) {
+      await sendDueReminders(now);
+      await sendDueBriefings(now);
+    }
   } catch (error) {
     console.warn("[push] scheduled tick failed", error);
   } finally {
-    globalForSched.avelomScheduledPushRunning = false;
+    globalForSched.alpiplanScheduledPushRunning = false;
   }
 }

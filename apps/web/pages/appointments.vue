@@ -436,7 +436,7 @@ watch(
   <UContainer class="py-8 space-y-5">
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <div>
-        <p class="text-sm text-muted font-medium">Avelom · Termine</p>
+        <p class="text-sm text-muted font-medium">Alpiplan · Termine</p>
         <h1 class="text-2xl font-semibold tracking-tight">
           Termine
           <span class="ml-2 text-sm font-normal text-neutral-500">({{ pagination.total }})</span>

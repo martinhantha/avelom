@@ -1,43 +1,43 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* Brand tokens from the Avelom logo: coral mark #FC5A4C, navy wordmark #162230. */
+/* Brand tokens from the Alpiplan logo: orchid mark #9054FC, magenta swoosh #CC00C0, violet #480CC0. */
 @theme static {
-  --color-coral-50: #fff5f4;
-  --color-coral-100: #ffe8e6;
-  --color-coral-200: #ffd1cc;
-  --color-coral-300: #feb0a9;
-  --color-coral-400: #fd8278;
-  --color-coral-500: #fc5a4c;
-  --color-coral-600: #eb4133;
-  --color-coral-700: #c92e21;
-  --color-coral-800: #992d24;
-  --color-coral-900: #71251e;
-  --color-coral-950: #3f1612;
+  --color-orchid-50: #f6f0ff;
+  --color-orchid-100: #ede4fe;
+  --color-orchid-200: #dcc9fe;
+  --color-orchid-300: #c5a3fd;
+  --color-orchid-400: #ab7afc;
+  --color-orchid-500: #9054fc;
+  --color-orchid-600: #7b32f2;
+  --color-orchid-700: #6825d4;
+  --color-orchid-800: #5621ab;
+  --color-orchid-900: #471e88;
+  --color-orchid-950: #2c125c;
 
-  --color-ocean-50: #f3f8f9;
-  --color-ocean-100: #e4f0f3;
-  --color-ocean-200: #c9e2e8;
-  --color-ocean-300: #a4d0d9;
-  --color-ocean-400: #67b1c1;
-  --color-ocean-500: #3e8898;
-  --color-ocean-600: #337684;
-  --color-ocean-700: #295f6a;
-  --color-ocean-800: #214750;
-  --color-ocean-900: #1a363d;
-  --color-ocean-950: #102023;
+  --color-violet-50: #f4f0ff;
+  --color-violet-100: #ebe3fe;
+  --color-violet-200: #d5c7fd;
+  --color-violet-300: #b49afa;
+  --color-violet-400: #8b64f5;
+  --color-violet-500: #6d35ed;
+  --color-violet-600: #480cc0;
+  --color-violet-700: #3d0aa3;
+  --color-violet-800: #330c87;
+  --color-violet-900: #2c0e6e;
+  --color-violet-950: #1a0747;
 
-  --color-ink-50: #f5f6f8;
-  --color-ink-100: #ebeef2;
-  --color-ink-200: #d5dae1;
-  --color-ink-300: #b5bdc7;
-  --color-ink-400: #8a93a0;
-  --color-ink-500: #6a7381;
-  --color-ink-600: #515a68;
-  --color-ink-700: #3b4553;
-  --color-ink-800: #24303e;
-  --color-ink-900: #162230;
-  --color-ink-950: #0c1219;
+  --color-ink-50: #f6f5f8;
+  --color-ink-100: #eceaf0;
+  --color-ink-200: #d6d2de;
+  --color-ink-300: #b7b0c2;
+  --color-ink-400: #8c8499;
+  --color-ink-500: #6c6478;
+  --color-ink-600: #544e60;
+  --color-ink-700: #413c4c;
+  --color-ink-800: #2a2633;
+  --color-ink-900: #16121f;
+  --color-ink-950: #0c0814;
 }
 
 :root {

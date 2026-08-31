@@ -3,15 +3,15 @@ import { Contacts, PhoneType } from "@capacitor-community/contacts";
 import {
   WebDeviceCapabilities,
   isCallHintsPluginAvailable,
-  withAvelomContactMeta,
+  withAlpiplanContactMeta,
   type ContactWritePayload,
   type DeviceCapabilities,
   type DeviceContactLookupResult,
   type DeviceFeatureFlags,
   type DevicePlatform,
   type PickedContact,
-} from "@avelom/device-capabilities";
-import { AvelomDevice, CallHints } from "@avelom/capacitor-call-hints";
+} from "@alpiplan/device-capabilities";
+import { AlpiplanDevice, CallHints } from "@alpiplan/capacitor-call-hints";
 
 function nativePlatform(): DevicePlatform {
   return Capacitor.getPlatform() === "ios" ? "ios" : "android";
@@ -64,7 +64,7 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
   override async requestPushPermission(): Promise<NotificationPermission | "unsupported"> {
     if (this.platform === "android") {
       try {
-        await AvelomDevice.requestPermissions({ alias: "notifications" });
+        await AlpiplanDevice.requestPermissions({ alias: "notifications" });
       } catch {
         // Continue with the Web Notification prompt if native request fails.
       }
@@ -74,7 +74,7 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
 
   override async requestMicrophonePermission(): Promise<boolean> {
     try {
-      const status = await AvelomDevice.requestMicrophone();
+      const status = await AlpiplanDevice.requestMicrophone();
       if (!permissionGranted(status.microphone)) return false;
     } catch {
       return false;
@@ -84,10 +84,10 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
   }
 
   override async saveOrUpdateDeviceContact(payload: ContactWritePayload): Promise<void> {
-    const labeled = withAvelomContactMeta(payload);
+    const labeled = withAlpiplanContactMeta(payload);
     try {
-      await AvelomDevice.saveLocalContact({
-        displayName: labeled.displayName.trim() || "Avelom Kontakt",
+      await AlpiplanDevice.saveLocalContact({
+        displayName: labeled.displayName.trim() || "Alpiplan Kontakt",
         phone: labeled.phoneE164?.trim() || undefined,
         note: labeled.note,
         organization: labeled.organization,
@@ -102,13 +102,13 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
         await super.saveOrUpdateDeviceContact(labeled);
         return;
       }
-      const given = labeled.displayName.trim() || "Avelom Kontakt";
+      const given = labeled.displayName.trim() || "Alpiplan Kontakt";
       await Contacts.createContact({
         contact: {
           name: { given },
           organization: {
-            company: labeled.organization ?? "Avelom",
-            jobTitle: "Avelom-App",
+            company: labeled.organization ?? "Alpiplan",
+            jobTitle: "Alpiplan-App",
           },
           phones: labeled.phoneE164
             ? [{ type: PhoneType.Mobile, number: labeled.phoneE164, isPrimary: true }]
@@ -125,11 +125,11 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
     const trimmed = phone.trim();
     if (trimmed.replace(/\D/g, "").length < 6) return { status: "unknown" };
     try {
-      const permission = await AvelomDevice.checkPermissions();
+      const permission = await AlpiplanDevice.checkPermissions();
       if (!permissionGranted(permission.contacts)) {
         return { status: "unknown" };
       }
-      const result = await AvelomDevice.findContactByPhone({ phone: trimmed });
+      const result = await AlpiplanDevice.findContactByPhone({ phone: trimmed });
       if (!result.found || !result.contactId) return { status: "missing" };
       return {
         status: "saved",
@@ -147,7 +147,7 @@ export class CapacitorDeviceCapabilities extends WebDeviceCapabilities implement
   override async deleteDeviceContact(phone: string): Promise<void> {
     const trimmed = phone.trim();
     if (!trimmed) return;
-    await AvelomDevice.deleteContactByPhone({ phone: trimmed });
+    await AlpiplanDevice.deleteContactByPhone({ phone: trimmed });
   }
 }
 

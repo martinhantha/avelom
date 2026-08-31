@@ -21,5 +21,5 @@ Implementierung: Paket [`packages/device-capabilities`](../packages/device-capab
 1. Client-Plugin `apps/web/plugins/device-capabilities.client.ts` wählt die Implementierung:
    - Browser → `WebDeviceCapabilities`
    - Capacitor iOS/Android → `CapacitorDeviceCapabilities` (`@capacitor-community/contacts`)
-   - Android + Opt-in → `AndroidCallHintCapabilities` + Plugin `@avelom/capacitor-call-hints`
+   - Android + Opt-in → `AndroidCallHintCapabilities` + Plugin `@alpiplan/capacitor-call-hints`
 2. Native Projekte: `apps/mobile-shell` (Capacitor lädt die gehostete Nuxt-URL).

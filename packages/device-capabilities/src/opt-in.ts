@@ -1,4 +1,4 @@
-export const CALL_HINTS_OPT_IN_KEY = "avelom.device.callHintsOptIn";
+export const CALL_HINTS_OPT_IN_KEY = "alpiplan.device.callHintsOptIn";
 
 export function isCallHintsOptIn(): boolean {
   if (typeof localStorage === "undefined") return false;

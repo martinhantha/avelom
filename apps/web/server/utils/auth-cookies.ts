@@ -4,7 +4,7 @@ import { ACCESS_TTL_SEC, REFRESH_TTL_SEC } from "./jwt";
 import { authSessionFromAccessToken, refreshTokens } from "./auth-service";
 
 function accessCookieName(): string {
-  return useRuntimeConfig().authCookie ?? "avelom_at";
+  return useRuntimeConfig().authCookie ?? "alpiplan_at";
 }
 
 function refreshCookieName(): string {

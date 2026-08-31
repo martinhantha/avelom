@@ -1,4 +1,4 @@
-import type { CallHint } from "@avelom/device-capabilities";
+import type { CallHint } from "@alpiplan/device-capabilities";
 import type { PermissionState, PluginListenerHandle } from "@capacitor/core";
 
 export interface CallHintsPermissionStatus {
@@ -11,19 +11,19 @@ export interface CallHintsPlugin {
   requestPermissions(): Promise<CallHintsPermissionStatus>;
 }
 
-export interface AvelomDevicePermissionStatus {
+export interface AlpiplanDevicePermissionStatus {
   microphone: PermissionState;
   contacts: PermissionState;
   notifications?: PermissionState;
 }
 
-export interface AvelomDevicePlugin {
-  checkPermissions(): Promise<AvelomDevicePermissionStatus>;
+export interface AlpiplanDevicePlugin {
+  checkPermissions(): Promise<AlpiplanDevicePermissionStatus>;
   requestPermissions(options?: {
     alias?: "microphone" | "contacts" | "notifications";
-  }): Promise<AvelomDevicePermissionStatus>;
-  requestAllPermissions(): Promise<AvelomDevicePermissionStatus>;
-  requestMicrophone(): Promise<AvelomDevicePermissionStatus>;
+  }): Promise<AlpiplanDevicePermissionStatus>;
+  requestAllPermissions(): Promise<AlpiplanDevicePermissionStatus>;
+  requestMicrophone(): Promise<AlpiplanDevicePermissionStatus>;
   openAppSettings(): Promise<void>;
   openWhatsApp(options: { phone: string; app?: "whatsapp" | "business" }): Promise<void>;
   showLocalNotification(options: { title: string; body: string; id?: string }): Promise<void>;

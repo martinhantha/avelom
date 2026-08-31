@@ -1,4 +1,4 @@
-# Rechtliches & Datenschutz — Pflichtenheft-Anhang (Avelom / ogama)
+# Rechtliches & Datenschutz — Pflichtenheft-Anhang (Alpiplan / ogama)
 
 > **Hinweis:** Keine Rechtsberatung. Vor Produktivgang von Fachanwält:innen / DSB prüfen lassen.
 
@@ -6,7 +6,7 @@
 
 | Akteur | Typische Einordnung |
 |--------|---------------------|
-| **Avelom-Betreiber** (Software-Anbieter) | Auftragsverarbeiter (AV) gegenüber den **Mandanten** (Flugschule etc.), sofern diese Personendaten in der App verarbeiten. |
+| **Alpiplan-Betreiber** (Software-Anbieter) | Auftragsverarbeiter (AV) gegenüber den **Mandanten** (Flugschule etc.), sofern diese Personendaten in der App verarbeiten. |
 | **Mandant (Unternehmen)** | Verantwortliche für die in ihrem Account verarbeiteten Daten (Lehrkräfte, Kund:innen, Schüler:innen). |
 | **Endnutzer:innen (App)** | Betroffene; Rechte auf Auskunft, Löschung, Berichtigung, Datenportabilität (über den Mandanten bzw. exportierbare Funktionen). |
 
@@ -37,7 +37,7 @@
 
 - Schreiben/Lesen von Gerätekontakten nur nach **OS-Permission** und **Nutzeraktion** (z. B. „Kontakt speichern“).
 - App muss **vollständig ohne** Adressbuch funktionieren.
-- Kennzeichnung als Avelom-Kontakt / interne Kundennummer als **optionale** Notizfelder (plattformabhängig).
+- Kennzeichnung als Alpiplan-Kontakt / interne Kundennummer als **optionale** Notizfelder (plattformabhängig).
 
 ## 6. Spracheingabe / Transkription
 

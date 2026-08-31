@@ -1,4 +1,4 @@
-package at.avelom.plugins.callhints;
+package at.alpiplan.plugins.callhints;
 
 import android.Manifest;
 import android.accounts.Account;
@@ -43,19 +43,19 @@ import java.util.ArrayList;
 import java.util.HashSet;
 
 @CapacitorPlugin(
-    name = "AvelomDevice",
+    name = "AlpiplanDevice",
     permissions = {
         @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO }),
         @Permission(alias = "contacts", strings = { Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS }),
         @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
     }
 )
-public class AvelomDevicePlugin extends Plugin {
+public class AlpiplanDevicePlugin extends Plugin {
 
-    private static final String ACCOUNT_NAME = "Avelom";
-    private static final String ACCOUNT_TYPE = "at.avelom.app";
+    private static final String ACCOUNT_NAME = "Alpiplan";
+    private static final String ACCOUNT_TYPE = "at.alpiplan.app";
     private static final String GOOGLE_ACCOUNT_PREFIX = "com.google";
-    private static final String NOTIFICATION_CHANNEL_ID = "avelom_appointments";
+    private static final String NOTIFICATION_CHANNEL_ID = "alpiplan_appointments";
     private static final long SPEECH_RESTART_DELAY_MS = 120L;
     private static final long SPEECH_RECREATE_DELAY_MS = 220L;
 
@@ -228,7 +228,7 @@ public class AvelomDevicePlugin extends Plugin {
             return;
         }
 
-        String title = call.getString("title", "Avelom");
+        String title = call.getString("title", "Alpiplan");
         String body = call.getString("body", "");
         String id = call.getString("id");
         int notificationId = id != null && !id.isEmpty() ? id.hashCode() : (int) System.currentTimeMillis();
@@ -286,7 +286,7 @@ public class AvelomDevicePlugin extends Plugin {
             "Termine",
             NotificationManager.IMPORTANCE_HIGH
         );
-        channel.setDescription("Neue Termine in Avelom");
+        channel.setDescription("Neue Termine in Alpiplan");
         manager.createNotificationChannel(channel);
     }
 
@@ -385,7 +385,7 @@ public class AvelomDevicePlugin extends Plugin {
     private void insertLocalContact(PluginCall call) {
         String displayName = call.getString("displayName", "").trim();
         if (displayName.isEmpty()) {
-            displayName = "Avelom Kontakt";
+            displayName = "Alpiplan Kontakt";
         }
         String phone = emptyToNull(call.getString("phone"));
         String note = emptyToNull(call.getString("note"));
@@ -567,11 +567,11 @@ public class AvelomDevicePlugin extends Plugin {
         return false;
     }
 
-    private String applyInsert(String displayName, String phone, String note, String organization, boolean useAvelomAccount)
+    private String applyInsert(String displayName, String phone, String note, String organization, boolean useAlpiplanAccount)
         throws Exception {
         ArrayList<ContentProviderOperation> ops = new ArrayList<>();
         ContentProviderOperation.Builder accountOp = ContentProviderOperation.newInsert(RawContacts.CONTENT_URI);
-        if (useAvelomAccount) {
+        if (useAlpiplanAccount) {
             String[] account = resolveNonGoogleAccount();
             accountOp.withValue(RawContacts.ACCOUNT_NAME, account[0]).withValue(RawContacts.ACCOUNT_TYPE, account[1]);
         } else {
@@ -593,7 +593,7 @@ public class AvelomDevicePlugin extends Plugin {
                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
                 .withValue(ContactsContract.Data.MIMETYPE, Organization.CONTENT_ITEM_TYPE)
                 .withValue(Organization.COMPANY, organization)
-                .withValue(Organization.TITLE, "Avelom-App")
+                .withValue(Organization.TITLE, "Alpiplan-App")
                 .build()
         );
 
@@ -628,7 +628,7 @@ public class AvelomDevicePlugin extends Plugin {
     }
 
     /**
-     * Prefer the Avelom local account. If the device already has a non-Google phone
+     * Prefer the Alpiplan local account. If the device already has a non-Google phone
      * account (Samsung "Phone", etc.), use that instead so the contact never syncs.
      */
     private String[] resolveNonGoogleAccount() {
@@ -643,7 +643,7 @@ public class AvelomDevicePlugin extends Plugin {
                 }
             }
         } catch (Exception ignored) {
-            // Missing GET_ACCOUNTS is fine — fall back to the Avelom local account.
+            // Missing GET_ACCOUNTS is fine — fall back to the Alpiplan local account.
         }
         return new String[] { ACCOUNT_NAME, ACCOUNT_TYPE };
     }

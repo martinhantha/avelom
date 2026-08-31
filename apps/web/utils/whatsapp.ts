@@ -1,6 +1,6 @@
 export type WhatsAppApp = "whatsapp" | "business";
 
-export const WHATSAPP_APP_STORAGE_KEY = "avelom.device.whatsappApp";
+export const WHATSAPP_APP_STORAGE_KEY = "alpiplan.device.whatsappApp";
 
 export function readWhatsAppApp(): WhatsAppApp {
   if (typeof localStorage === "undefined") return "whatsapp";

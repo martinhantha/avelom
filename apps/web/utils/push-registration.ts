@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { AvelomDevice } from "@avelom/capacitor-call-hints";
+import { AlpiplanDevice } from "@alpiplan/capacitor-call-hints";
 
 let lastToken: string | null = null;
 let registering = false;
@@ -10,8 +10,8 @@ export async function registerNativePushToken(): Promise<void> {
   if (registering) return;
   registering = true;
   try {
-    await AvelomDevice.requestPermissions({ alias: "notifications" });
-    const result = await AvelomDevice.getPushToken();
+    await AlpiplanDevice.requestPermissions({ alias: "notifications" });
+    const result = await AlpiplanDevice.getPushToken();
     const token = result.token?.trim();
     if (!token) return;
     lastToken = token;

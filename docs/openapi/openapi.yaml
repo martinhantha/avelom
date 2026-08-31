@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Avelom API
+  title: Alpiplan API
   version: 0.1.0
   description: |
     MVP HTTP API (tenant-scoped). Tenant wird aus Token/Middleware abgeleitet;

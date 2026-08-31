@@ -1,4 +1,4 @@
-// Avelom / ogama — domain schema (PostgreSQL)
+// Alpiplan / ogama — domain schema (PostgreSQL)
 // Soft delete: deletedAt on domain models; AuditLog append-only without soft delete.
 
 generator client {
@@ -76,6 +76,9 @@ model Tenant {
   resourcesEnabled Boolean @default(true)
   /// when true, Schnellerfassung may auto-start speech recognition; default off per tenant
   speechRecognitionEnabled Boolean @default(false)
+  /// when true, draft/confirmed appointments become completed after endsAt + autoCompleteAfterMinutes
+  autoCompleteAppointments Boolean @default(false)
+  autoCompleteAfterMinutes Int @default(0)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?

@@ -5,9 +5,9 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-04-01",
   runtimeConfig: {
     /** HttpOnly-Session-Cookie (nur Server) */
-    authCookie: process.env.AUTH_COOKIE_NAME ?? "avelom_at",
+    authCookie: process.env.AUTH_COOKIE_NAME ?? "alpiplan_at",
     public: {
-      demoEmail: process.env.NUXT_PUBLIC_DEMO_EMAIL ?? "demo@avelom.local",
+      demoEmail: process.env.NUXT_PUBLIC_DEMO_EMAIL ?? "demo@alpiplan.local",
     },
   },
   nitro: {
@@ -25,7 +25,7 @@ export default defineNuxtConfig({
   },
   vite: {
     optimizeDeps: {
-      include: ["@capacitor/core", "@capacitor-community/contacts", "@avelom/capacitor-call-hints"],
+      include: ["@capacitor/core", "@capacitor-community/contacts", "@alpiplan/capacitor-call-hints"],
     },
     resolve: {
       dedupe: [
@@ -39,16 +39,16 @@ export default defineNuxtConfig({
   },
   // Reka (Nuxt UI) als CJS aus node_modules lädt sonst ein anderes @vue/runtime-core als der SSR-Bundle.
   ssr: {
-    noExternal: ["reka-ui", "vaul-vue", "@avelom/device-capabilities", "@avelom/capacitor-call-hints"],
+    noExternal: ["reka-ui", "vaul-vue", "@alpiplan/device-capabilities", "@alpiplan/capacitor-call-hints"],
   },
   app: {
     head: {
-      title: "Avelom",
+      title: "Alpiplan",
       meta: [
-        { name: "description", content: "Avelom — Prototyp Schnellerfassung & Planung" },
+        { name: "description", content: "Alpiplan — Prototyp Schnellerfassung & Planung" },
         { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-        { name: "theme-color", content: "#162230", media: "(prefers-color-scheme: light)" },
-        { name: "theme-color", content: "#0c1219", media: "(prefers-color-scheme: dark)" },
+        { name: "theme-color", content: "#16121f", media: "(prefers-color-scheme: light)" },
+        { name: "theme-color", content: "#0c0814", media: "(prefers-color-scheme: dark)" },
       ],
       link: [
         { rel: "icon", type: "image/png", href: "/favicon.png" },

@@ -1,4 +1,4 @@
-# Coolify-Deployment (Avelom / ogama)
+# Coolify-Deployment (Alpiplan / ogama)
 
 Coolify orchestriert Docker-Compose-Stacks. Dieses Repository liefert [`docker-compose.yml`](../docker-compose.yml) als Referenz für **lokale Entwicklung** und als Vorlage für **Staging/Production**.
 
@@ -14,7 +14,7 @@ Coolify orchestriert Docker-Compose-Stacks. Dieses Repository liefert [`docker-c
 
 ## Coolify: empfohlene Schritte
 
-1. **Neues Projekt** in Coolify anlegen (z. B. `avelom-production`).
+1. **Neues Projekt** in Coolify anlegen (z. B. `alpiplan-production`).
 2. **PostgreSQL** und **Redis** entweder als verwaltete Coolify-Services **oder** wie hier als Compose-Services betreiben.
 3. **Secrets** in Coolify setzen (nicht im Git):
    - `POSTGRES_PASSWORD` (stark)

@@ -1,4 +1,4 @@
-import type { DeviceContactLookupResult } from "@avelom/device-capabilities";
+import type { DeviceContactLookupResult } from "@alpiplan/device-capabilities";
 import { computed, onBeforeUnmount, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { useDeviceCapabilities } from "./useDeviceCapabilities";
 

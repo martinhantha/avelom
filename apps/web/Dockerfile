@@ -14,7 +14,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY . .
 RUN pnpm exec prisma generate
-RUN pnpm --filter @avelom/web build
+RUN pnpm --filter @alpiplan/web build
 
 FROM base AS runner
 WORKDIR /app

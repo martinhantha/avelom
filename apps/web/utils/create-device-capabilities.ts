@@ -5,8 +5,8 @@ import {
   isCallHintsOptIn,
   type CallHint,
   type DeviceCapabilities,
-} from "@avelom/device-capabilities";
-import { CallHints } from "@avelom/capacitor-call-hints";
+} from "@alpiplan/device-capabilities";
+import { CallHints } from "@alpiplan/capacitor-call-hints";
 import { CapacitorDeviceCapabilities } from "./capacitor-device-capabilities";
 
 export function createRuntimeDeviceCapabilities(): DeviceCapabilities {

@@ -1,7 +1,7 @@
 {
-  "name": "@avelom/mobile-shell",
+  "name": "@alpiplan/mobile-shell",
   "private": true,
-  "description": "Capacitor native shell around the Avelom Nuxt app",
+  "description": "Capacitor native shell around the Alpiplan Nuxt app",
   "scripts": {
     "cap:sync": "cap sync && node scripts/patch-ios-info-plist.mjs && node scripts/apply-ios-branding.mjs && node scripts/patch-android-push.mjs",
     "cap:copy": "cap copy",
@@ -11,7 +11,7 @@
     "cap:open:ios": "cap open ios"
   },
   "dependencies": {
-    "@avelom/capacitor-call-hints": "workspace:*",
+    "@alpiplan/capacitor-call-hints": "workspace:*",
     "@capacitor-community/contacts": "^7.0.0",
     "@capacitor/android": "^7.4.3",
     "@capacitor/core": "^7.4.3",

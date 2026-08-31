@@ -156,7 +156,7 @@ onMounted(load);
     <template v-else>
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <p class="text-sm text-muted font-medium">Avelom · Mandanten</p>
+          <p class="text-sm text-muted font-medium">Alpiplan · Mandanten</p>
           <h1 class="text-2xl font-semibold tracking-tight">
             Mandanten
             <span class="ml-2 text-sm font-normal text-neutral-500">({{ filtered.length }})</span>

@@ -52,6 +52,6 @@ function makeSplash() {
 
 const iconOk = copyIcon();
 const splashOk = makeSplash();
-if (iconOk) console.log("Applied Avelom app icon to iOS.");
-if (splashOk) console.log("Applied Avelom splash to iOS.");
+if (iconOk) console.log("Applied Alpiplan app icon to iOS.");
+if (splashOk) console.log("Applied Alpiplan splash to iOS.");
 if (!iconOk && !splashOk) process.exit(0);

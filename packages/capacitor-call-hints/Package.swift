@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "AvelomCallHints",
+    name: "AlpiplanCallHints",
     platforms: [.iOS(.v14)],
     products: [
         .library(
-            name: "AvelomCallHints",
+            name: "AlpiplanCallHints",
             targets: ["CallHintsPlugin"]
         )
     ],

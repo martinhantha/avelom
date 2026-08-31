@@ -1,4 +1,4 @@
-# Stakeholder-Signoff — Avelom (ogama)
+# Stakeholder-Signoff — Alpiplan (ogama)
 
 Dieses Dokument dient der formalen Abstimmung von Vision, MVP-Umfang und Markenführung vor Start der Umsetzungsphase.
 
@@ -11,7 +11,7 @@ Dieses Dokument dient der formalen Abstimmung von Vision, MVP-Umfang und Markenf
 
 ## 2. Markenführung
 
-- **Öffentlich / UI / Stores:** **Avelom**
+- **Öffentlich / UI / Stores:** **Alpiplan**
 - **Intern / Repo / technische Pakete:** **ogama** (optional), siehe [GLOSSARY.md](./GLOSSARY.md)
 
 **Signoff Markenführung**

@@ -11,12 +11,12 @@ export { shouldReceiveAppointmentLive, assignedTeachersFromAppointment };
 type Listener = (event: AppointmentLiveEvent) => void;
 
 const globalForLive = globalThis as typeof globalThis & {
-  avelomAppointmentListeners?: Map<string, Set<Listener>>;
+  alpiplanAppointmentListeners?: Map<string, Set<Listener>>;
 };
 
 const listeners =
-  globalForLive.avelomAppointmentListeners ?? new Map<string, Set<Listener>>();
-globalForLive.avelomAppointmentListeners = listeners;
+  globalForLive.alpiplanAppointmentListeners ?? new Map<string, Set<Listener>>();
+globalForLive.alpiplanAppointmentListeners = listeners;
 
 export function appointmentEventTitle(appointment: {
   customer?: { displayName?: string | null } | null;

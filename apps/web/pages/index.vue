@@ -381,7 +381,7 @@ async function deleteAppointment(appointment: AppointmentListItem) {
 <template>
   <UContainer class="py-8 space-y-6">
     <div class="space-y-2">
-      <p class="text-sm text-muted font-medium">Avelom · Dashboard</p>
+      <p class="text-sm text-muted font-medium">Alpiplan · Dashboard</p>
       <h1 class="text-2xl font-semibold tracking-tight">Übersicht</h1>
       <p class="text-neutral-600 dark:text-neutral-400 max-w-prose">
         Schneller Überblick über Termine, Tagesplan und wichtige Kernflows.
