@@ -7,7 +7,11 @@ import { useAuth } from "../composables/useAuth";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import { useDeviceContactLookup } from "../composables/useDeviceContactLookup";
 import type { ClarifyingQuestion, ParseIntentResponse, ParsedAppointmentIntent } from "../types/assistant";
-import { resolveAppointmentPhone } from "../utils/appointment-contact";
+import {
+  fallbackContactDisplayName,
+  resolveAppointmentPhone,
+  resolveContactOrganization,
+} from "../utils/appointment-contact";
 import { commitUtterance, withLiveInterim } from "../utils/speech-transcript";
 import { isNativeAndroidSpeech, startNativeSpeech } from "../utils/native-speech";
 
@@ -614,18 +618,22 @@ async function saveDeviceContact() {
   savingDeviceContact.value = true;
   deviceContactHint.value = "";
   try {
+    const organization = resolveContactOrganization(primaryTenant.value?.tenantName);
     await device.value.saveOrUpdateDeviceContact({
-      displayName: passengerName.value.trim() || text.value.trim() || "Alpiplan Kontakt",
+      displayName:
+        passengerName.value.trim() ||
+        text.value.trim() ||
+        fallbackContactDisplayName(primaryTenant.value?.tenantName),
       phoneE164: form.phone.trim() || undefined,
+      organization,
     });
     await refreshDeviceContact();
     if (device.value.platform === "web") {
-      deviceContactHint.value =
-        "vCard heruntergeladen — auf dem Telefon importieren (Organisation: Alpiplan).";
+      deviceContactHint.value = `vCard heruntergeladen — auf dem Telefon importieren (Organisation: ${organization}).`;
     } else if (deviceContactLookup.value.match?.googleSynced) {
       deviceContactHint.value = "Nummer ist schon in Google Kontakte gespeichert.";
     } else {
-      deviceContactHint.value = "Kontakt lokal unter „Alpiplan“ gespeichert, nicht im Google-Konto.";
+      deviceContactHint.value = `Kontakt lokal unter „${organization}“ gespeichert, nicht im Google-Konto.`;
     }
   } catch {
     deviceContactHint.value = "Kontakt konnte nicht gespeichert werden.";

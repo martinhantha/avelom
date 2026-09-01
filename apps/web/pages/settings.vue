@@ -816,7 +816,7 @@ onMounted(() => {
             <p class="text-xs text-neutral-500">
               <template v-if="speechRecognitionEnabled">Spracheingabe und Adressbuch. </template>
               <template v-else>Adressbuch. </template>
-              Kontakte werden lokal unter „Alpiplan“ gespeichert, nicht im Google-Konto.
+              Kontakte werden lokal gespeichert (Organisation: {{ primaryTenant?.tenantName || "Mandant" }}), nicht im Google-Konto.
             </p>
             <ul class="text-sm space-y-1">
               <li v-if="speechRecognitionEnabled" class="flex items-center justify-between gap-3">

@@ -2,12 +2,14 @@
 import { Capacitor } from "@capacitor/core";
 import { AlpiplanDevice } from "@alpiplan/capacitor-call-hints";
 import { computed, ref } from "vue";
+import { useAuth } from "../composables/useAuth";
 import { useDeviceCapabilities } from "../composables/useDeviceCapabilities";
 import { useDeviceContactLookup } from "../composables/useDeviceContactLookup";
 import { useWhatsAppPreference } from "../composables/useWhatsAppPreference";
 import {
   resolveAppointmentDisplayName,
   resolveAppointmentPhone,
+  resolveContactOrganization,
   toTelHref,
   type AppointmentContactSource,
 } from "../utils/appointment-contact";
@@ -38,6 +40,7 @@ const emit = defineEmits<{
 }>();
 
 const { device } = useDeviceCapabilities();
+const { primaryTenant } = useAuth();
 const { whatsappApp } = useWhatsAppPreference();
 const savingContact = ref(false);
 const removingContact = ref(false);
@@ -94,8 +97,9 @@ async function saveDeviceContact() {
   contactSaveState.value = "idle";
   try {
     await device.value.saveOrUpdateDeviceContact({
-      displayName: resolveAppointmentDisplayName(props.appointment),
+      displayName: resolveAppointmentDisplayName(props.appointment, primaryTenant.value?.tenantName),
       phoneE164: phone.value,
+      organization: resolveContactOrganization(primaryTenant.value?.tenantName),
     });
     await refreshContact();
     contactSaveState.value = "saved";

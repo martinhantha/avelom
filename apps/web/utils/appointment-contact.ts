@@ -77,8 +77,23 @@ export function isAssignedTeacher(
   return appointment.teacher?.id === teacherId;
 }
 
-export function resolveAppointmentDisplayName(appointment: AppointmentContactSource): string {
-  return firstNonEmpty(appointment.customer?.displayName, appointment.appointmentContactText) || "Alpiplan Kontakt";
+export function resolveAppointmentDisplayName(
+  appointment: AppointmentContactSource,
+  tenantName?: string | null,
+): string {
+  return (
+    firstNonEmpty(appointment.customer?.displayName, appointment.appointmentContactText) ||
+    fallbackContactDisplayName(tenantName)
+  );
+}
+
+export function resolveContactOrganization(tenantName?: string | null): string {
+  return tenantName?.trim() || "Alpiplan";
+}
+
+export function fallbackContactDisplayName(tenantName?: string | null): string {
+  const org = tenantName?.trim();
+  return org ? `${org} Kontakt` : "Alpiplan Kontakt";
 }
 
 export function resolveAppointmentPhone(appointment: AppointmentContactSource): string | null {

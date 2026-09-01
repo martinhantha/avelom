@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="at.avelom.plugins.callhints" >
+    package="at.alpiplan.plugins.callhints" >
 
     <uses-sdk android:minSdkVersion="23" />
 
