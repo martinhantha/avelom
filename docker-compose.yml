@@ -1,29 +1,6 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: alpiplan
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alpiplan_dev_change_me}
-      POSTGRES_DB: alpiplan
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U alpiplan -d alpiplan"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: ["redis-server", "--appendonly", "yes"]
-
-  web:
+  web-alpiplan:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -38,12 +15,14 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      postgres:
+      postgres-alpiplan:
         condition: service_healthy
-      redis:
+      redis-alpiplan:
         condition: service_started
+    networks:
+      - alpiplan-network
 
-  worker:
+  worker-alpiplan:
     build:
       context: ./apps/worker
       dockerfile: Dockerfile
@@ -52,35 +31,15 @@ services:
       DATABASE_URL: postgresql://alpiplan:${POSTGRES_PASSWORD:-alpiplan_dev_change_me}@postgres:5432/alpiplan?schema=public
       REDIS_URL: redis://redis:6379
     depends_on:
-      postgres:
+      postgres-alpiplan:
         condition: service_healthy
-      redis:
+      redis-alpiplan:
         condition: service_started
     profiles:
       - worker
+    networks:
+      - alpiplan-network
 
-  backup:
-    image: prodrigestivill/postgres-backup-local:16
-    restart: unless-stopped
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: alpiplan
-      POSTGRES_USER: alpiplan
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alpiplan_dev_change_me}
-      SCHEDULE: "@daily"
-      BACKUP_DIR: /backups
-      BACKUP_KEEP_DAYS: 7
-      BACKUP_KEEP_WEEKS: 4
-      BACKUP_KEEP_MONTHS: 6
-    volumes:
-      - pg_backups:/backups
-    depends_on:
-      postgres:
-        condition: service_healthy
-    profiles:
-      - backup
-
-volumes:
-  postgres_data:
-  redis_data:
-  pg_backups:
+networks:
+  alpiplan-network:
+    external: true
