@@ -8,17 +8,12 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
-      DATABASE_URL: postgresql://alpiplan:${POSTGRES_PASSWORD:-alpiplan_dev_change_me}@postgres:5432/alpiplan?schema=public
+      DATABASE_URL: postgresql://alpiplan:${POSTGRES_PASSWORD:-alpiplan_dev_change_me}@postgres-alpiplan:5432/alpiplan?schema=public
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-16-chars}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis-alpiplan:6379
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     ports:
       - "3000:3000"
-    depends_on:
-      postgres-alpiplan:
-        condition: service_healthy
-      redis-alpiplan:
-        condition: service_started
     networks:
       - alpiplan-network
 
@@ -28,13 +23,8 @@ services:
       dockerfile: Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://alpiplan:${POSTGRES_PASSWORD:-alpiplan_dev_change_me}@postgres:5432/alpiplan?schema=public
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      postgres-alpiplan:
-        condition: service_healthy
-      redis-alpiplan:
-        condition: service_started
+      DATABASE_URL: postgresql://alpiplan:${POSTGRES_PASSWORD:-alpiplan_dev_change_me}@postgres-alpiplan:5432/alpiplan?schema=public
+      REDIS_URL: redis://redis-alpiplan:6379
     profiles:
       - worker
     networks:
@@ -42,4 +32,5 @@ services:
 
 networks:
   alpiplan-network:
+    name: alpiplan-network
     external: true

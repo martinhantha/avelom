@@ -51,6 +51,7 @@ services:
       - alpiplan-network
 networks:
   alpiplan-network:
+    name: alpiplan-network
 
 volumes:
   postgres_data:
