@@ -128,7 +128,7 @@ async function submit() {
 
 async function remove(item: LessonType) {
   if (!primaryTenant.value?.tenantId) return;
-  if (!confirm(`Termintyp „${item.name}“ löschen?`)) return;
+  if (!confirm(`Termintyp „${item.name}“ löschen? Er kann im Papierkorb wiederhergestellt werden.`)) return;
   savingId.value = item.id;
   try {
     await $fetch(

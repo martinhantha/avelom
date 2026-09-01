@@ -13,6 +13,7 @@ const links = computed(() => {
       { to: "/users", label: "Benutzer", icon: "i-lucide-users" },
       { to: "/lesson-types", label: "Termintypen", icon: "i-lucide-list-checks" },
       { to: "/conflicts", label: "Konflikte", icon: "i-lucide-git-merge" },
+      { to: "/trash", label: "Papierkorb", icon: "i-lucide-trash-2" },
     );
   }
   if (user.value?.isSuperadmin) {

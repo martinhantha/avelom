@@ -59,3 +59,4 @@ CREATE INDEX CONCURRENTLY idx_customer_displayname_trgm
 
 - Extension oder Base-Repository: alle `findMany`/`findFirst` standardmäßig `where: { deletedAt: null }`.
 - Explizite Admin-Queries für Papierkorb: `where: { deletedAt: { not: null } }`.
+- Tenant-Admin-UI `/trash` listet gelöschte Termine, Kunden, Termintypen und Mitgliedschaften und stellt sie wieder her (`deletedAt`/`deletedByUserId` zurück auf `null`).

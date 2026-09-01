@@ -359,7 +359,7 @@ async function markCompleted(appointment: AppointmentListItem) {
 
 async function deleteAppointment(appointment: AppointmentListItem) {
   if (!primaryTenant.value?.tenantId) return;
-  if (!confirm(`Termin „${appointmentTitle(appointment)}“ wirklich löschen?`)) return;
+  if (!confirm(`Termin „${appointmentTitle(appointment)}“ wirklich löschen? Er kann im Papierkorb wiederhergestellt werden.`)) return;
   savingId.value = appointment.id;
   appointmentsError.value = "";
   try {

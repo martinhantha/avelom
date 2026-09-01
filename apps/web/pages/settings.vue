@@ -335,7 +335,7 @@ async function saveLessonType() {
 
 async function deleteLessonType(item: LessonType) {
   if (!primaryTenant.value?.tenantId) return;
-  if (!confirm(`Termintyp „${item.name}“ löschen?`)) return;
+  if (!confirm(`Termintyp „${item.name}“ löschen? Er kann im Papierkorb wiederhergestellt werden.`)) return;
   try {
     await $fetch(`/api/v1/tenants/${primaryTenant.value.tenantId}/lesson-types/${item.id}`, {
       method: "DELETE",

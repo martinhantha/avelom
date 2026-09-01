@@ -528,7 +528,7 @@ async function removeFromTenant(userItem: UserItem) {
   if (!userItem.roleInActive) return;
   if (
     !confirm(
-      `Benutzer ${userItem.email} aus Mandant „${primaryTenant.value.tenantName}“ entfernen?`,
+      `Benutzer ${userItem.email} aus Mandant „${primaryTenant.value.tenantName}“ entfernen? Die Mitgliedschaft kann im Papierkorb wiederhergestellt werden.`,
     )
   ) {
     return;
@@ -607,7 +607,7 @@ async function deleteUserAccount(userItem: UserItem) {
   if (!canDeleteUser(userItem)) return;
   if (
     !confirm(
-      `Benutzerkonto ${userItem.email} wirklich löschen? Die Person wird abgemeldet und erscheint nicht mehr in der Benutzerliste.`,
+      `Benutzerkonto ${userItem.email} wirklich löschen? Die Person wird abgemeldet und erscheint nicht mehr in der Benutzerliste. Wiederherstellen ist im Papierkorb möglich.`,
     )
   ) {
     return;

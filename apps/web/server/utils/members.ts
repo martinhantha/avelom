@@ -324,6 +324,70 @@ export async function removeTenantMember(
   });
 }
 
+export async function restoreTenantMember(tenantId: string, membershipIdInput: string | undefined) {
+  const membershipId = assertUuid(membershipIdInput, "id");
+  const membership = await prisma.membership.findFirst({
+    where: { id: membershipId, tenantId, deletedAt: { not: null } },
+    select: {
+      id: true,
+      role: true,
+      createdAt: true,
+      user: {
+        select: {
+          ...userPublicSelect,
+          deletedAt: true,
+        },
+      },
+    },
+  });
+  if (!membership) {
+    throwNotFound("Gelöschte Mitgliedschaft nicht gefunden", { membershipId });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.membership.update({
+      where: { id: membership.id },
+      data: { deletedAt: null, deletedByUserId: null },
+    });
+    if (membership.user.deletedAt) {
+      await tx.user.update({
+        where: { id: membership.user.id },
+        data: { deletedAt: null, deletedByUserId: null, disabledAt: null },
+      });
+    }
+  });
+
+  await ensureTeacherProfile({
+    tenantId,
+    membershipId: membership.id,
+    role: membership.role,
+    displayName: membership.user.name?.trim() || membership.user.email,
+  });
+
+  const refreshed = await prisma.membership.findUnique({
+    where: { id: membership.id },
+    select: {
+      id: true,
+      role: true,
+      createdAt: true,
+      user: { select: userPublicSelect },
+    },
+  });
+  if (!refreshed) {
+    throwNotFound("Mitgliedschaft nicht gefunden", { membershipId });
+  }
+
+  return {
+    membershipId: refreshed.id,
+    role: refreshed.role,
+    createdAt: refreshed.createdAt.toISOString(),
+    user: {
+      ...refreshed.user,
+      disabledAt: refreshed.user.disabledAt?.toISOString() ?? null,
+    },
+  };
+}
+
 export async function setUserDisabled(userId: string, disabled: boolean, actor: UserActor) {
   if (userId === actor.id) {
     throwValidation(disabled ? "Du kannst dich nicht selbst sperren" : "Du kannst dich nicht selbst entsperren");

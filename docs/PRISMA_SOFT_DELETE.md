@@ -36,3 +36,14 @@ function shouldFilterSoftDeleted(model: string) {
 ```
 
 Produktionscode: pro Modell feinjustieren oder explizite Repositories statt globalem `$allModels`, um Edge Cases (Admin-Papierkorb) nicht zu verstecken.
+
+## Admin-Papierkorb
+
+Tenant-Admins (`Membership.role = ADMIN`) und Superadmins können gelöschte Datensätze listen und wiederherstellen:
+
+- UI: `/trash`
+- `GET /api/v1/tenants/{tenantId}/trash`
+- `POST /api/v1/tenants/{tenantId}/trash/{kind}/{id}/restore`
+
+Aktuell: Termine, Kunden (+ Telefonnummern), Termintypen, entfernte Mitgliedschaften.
+Beim Wiederherstellen eines Termins wird ein mitgelöschter Kunde mit zurückgeholt.

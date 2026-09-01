@@ -20,6 +20,7 @@ tags:
   - name: Scheduling
   - name: Sync
   - name: Assistant
+  - name: Trash
 
 paths:
   /auth/login:
@@ -411,6 +412,68 @@ paths:
       responses:
         "204":
           description: No content
+
+  /tenants/{tenantId}/trash:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      tags: [Trash]
+      summary: List soft-deleted tenant records (tenant admin)
+      operationId: listTrash
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [appointment, customer, lessonType, member]
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrashList"
+
+  /tenants/{tenantId}/trash/{kind}/{id}/restore:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [appointment, customer, lessonType, member]
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Trash]
+      summary: Restore a soft-deleted tenant record (tenant admin)
+      operationId: restoreTrashItem
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrashRestore"
+        "404":
+          description: Trash item not found
 
   /tenants/{tenantId}/scheduling/options:
     parameters:
@@ -1107,6 +1170,72 @@ components:
           additionalProperties: true
         source:
           type: string
+
+    TrashItem:
+      type: object
+      required: [kind, id, title, deletedAt]
+      properties:
+        kind:
+          type: string
+          enum: [appointment, customer, lessonType, member]
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        subtitle:
+          type: string
+          nullable: true
+        deletedAt:
+          type: string
+          format: date-time
+        deletedByName:
+          type: string
+          nullable: true
+
+    TrashList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrashItem"
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+        counts:
+          type: object
+          properties:
+            appointment:
+              type: integer
+            customer:
+              type: integer
+            lessonType:
+              type: integer
+            member:
+              type: integer
+            total:
+              type: integer
+
+    TrashRestore:
+      type: object
+      required: [kind, data]
+      properties:
+        kind:
+          type: string
+          enum: [appointment, customer, lessonType, member]
+        data:
+          type: object
+          additionalProperties: true
+          description: Restored entity (Appointment, Customer, LessonType, or membership)
 
   securitySchemes:
     bearerAuth:

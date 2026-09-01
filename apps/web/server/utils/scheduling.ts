@@ -888,6 +888,40 @@ export async function softDeleteAppointment(
   });
 }
 
+export async function restoreAppointment(tenantId: string, appointmentIdInput: string | undefined) {
+  const appointmentId = normalizeRequiredUuid(appointmentIdInput, "appointmentId");
+  const existing = await prisma.appointment.findFirst({
+    where: { id: appointmentId, tenantId, deletedAt: { not: null } },
+    select: { id: true, customerId: true },
+  });
+  if (!existing) {
+    throwNotFound("Gelöschter Termin nicht gefunden", { appointmentId });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.appointment.update({
+      where: { id: appointmentId },
+      data: { deletedAt: null, deletedByUserId: null, version: { increment: 1 } },
+    });
+    if (!existing.customerId) return;
+    const customer = await tx.customer.findFirst({
+      where: { id: existing.customerId, tenantId, deletedAt: { not: null } },
+      select: { id: true },
+    });
+    if (!customer) return;
+    await tx.customer.update({
+      where: { id: customer.id },
+      data: { deletedAt: null, deletedByUserId: null, version: { increment: 1 } },
+    });
+    await tx.customerPhone.updateMany({
+      where: { tenantId, customerId: customer.id, deletedAt: { not: null } },
+      data: { deletedAt: null, deletedByUserId: null },
+    });
+  });
+
+  return getAppointment(tenantId, appointmentId);
+}
+
 export async function listLessonTypes(tenantId: string) {
   const rows = await prisma.lessonType.findMany({
     where: { tenantId, deletedAt: null },
@@ -1036,6 +1070,34 @@ export async function softDeleteLessonType(
   ]);
 }
 
+export async function restoreLessonType(tenantId: string, lessonTypeIdInput: string | undefined) {
+  const lessonTypeId = normalizeRequiredUuid(lessonTypeIdInput, "lessonTypeId");
+  const existing = await prisma.lessonType.findFirst({
+    where: { id: lessonTypeId, tenantId, deletedAt: { not: null } },
+    select: { id: true },
+  });
+  if (!existing) {
+    throwNotFound("Gelöschte Terminart nicht gefunden", { lessonTypeId });
+  }
+  const row = await prisma.lessonType.update({
+    where: { id: lessonTypeId },
+    data: { deletedAt: null, deletedByUserId: null },
+    select: {
+      id: true,
+      tenantId: true,
+      name: true,
+      defaultDurationMin: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+  return {
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
 export async function listCustomers(tenantId: string, query: { q?: string }) {
   const q = query.q?.trim();
   const rows = await prisma.customer.findMany({
@@ -1161,6 +1223,28 @@ export async function softDeleteCustomer(
       data: { deletedAt, deletedByUserId: actorUserId },
     }),
   ]);
+}
+
+export async function restoreCustomer(tenantId: string, customerIdInput: string | undefined) {
+  const customerId = normalizeRequiredUuid(customerIdInput, "customerId");
+  const existing = await prisma.customer.findFirst({
+    where: { id: customerId, tenantId, deletedAt: { not: null } },
+    select: { id: true },
+  });
+  if (!existing) {
+    throwNotFound("Gelöschter Kunde nicht gefunden", { customerId });
+  }
+  await prisma.$transaction([
+    prisma.customer.update({
+      where: { id: customerId },
+      data: { deletedAt: null, deletedByUserId: null, version: { increment: 1 } },
+    }),
+    prisma.customerPhone.updateMany({
+      where: { tenantId, customerId, deletedAt: { not: null } },
+      data: { deletedAt: null, deletedByUserId: null },
+    }),
+  ]);
+  return getCustomer(tenantId, customerId);
 }
 
 export async function listAvailabilityRules(tenantId: string, teacherIdInput: string | undefined) {
