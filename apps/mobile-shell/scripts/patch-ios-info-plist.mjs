@@ -4,13 +4,15 @@ import { resolve } from "node:path";
 const plistPath = resolve("ios/App/App/Info.plist");
 if (!existsSync(plistPath)) process.exit(0);
 
+const capacitorConfig = readFileSync(resolve("capacitor.config.ts"), "utf8");
+const appId = capacitorConfig.match(/appId:\s*"([^"]+)"/)?.[1] ?? "at.alpiplan.app";
+const appName = capacitorConfig.match(/appName:\s*"([^"]+)"/)?.[1] ?? "Alpiplan";
+
 const stringKeys = {
-  NSContactsUsageDescription:
-    "Alpiplan speichert oder liest Kontakte nur, wenn du das ausdrücklich auslöst.",
-  NSMicrophoneUsageDescription:
-    "Alpiplan nutzt das Mikrofon nur für die Sprachaufnahme in der Schnellerfassung.",
-  NSSpeechRecognitionUsageDescription:
-    "Alpiplan wandelt deine Sprache in Text um, um Termine vorzubereiten.",
+  CFBundleDisplayName: appName,
+  NSContactsUsageDescription: `${appName} speichert oder liest Kontakte nur, wenn du das ausdrücklich auslöst.`,
+  NSMicrophoneUsageDescription: `${appName} nutzt das Mikrofon nur für die Sprachaufnahme in der Schnellerfassung.`,
+  NSSpeechRecognitionUsageDescription: `${appName} wandelt deine Sprache in Text um, um Termine vorzubereiten.`,
 };
 
 function escapeXml(value) {
@@ -21,8 +23,15 @@ let xml = readFileSync(plistPath, "utf8");
 const inserts = [];
 
 for (const [key, value] of Object.entries(stringKeys)) {
-  if (xml.includes(`<key>${key}</key>`)) continue;
-  inserts.push(`\t<key>${key}</key>\n\t<string>${escapeXml(value)}</string>`);
+  const escaped = escapeXml(value);
+  const existing = new RegExp(
+    `(<key>${key}</key>\\s*<string>)[\\s\\S]*?(</string>)`,
+  );
+  if (existing.test(xml)) {
+    xml = xml.replace(existing, `$1${escaped}$2`);
+    continue;
+  }
+  inserts.push(`\t<key>${key}</key>\n\t<string>${escaped}</string>`);
 }
 
 if (!xml.includes("<key>LSApplicationQueriesSchemes</key>")) {
@@ -37,12 +46,27 @@ if (!xml.includes("<key>LSApplicationQueriesSchemes</key>")) {
   );
 }
 
-if (inserts.length === 0) process.exit(0);
-
-const next = xml.replace(/\t<\/dict>\n<\/plist>\s*$/, `${inserts.join("\n")}\n\t</dict>\n</plist>\n`);
-if (next === xml) {
-  console.warn("Could not patch ios/App/App/Info.plist — unexpected plist format.");
-  process.exit(1);
+if (inserts.length > 0) {
+  const next = xml.replace(
+    /\t<\/dict>\n<\/plist>\s*$/,
+    `${inserts.join("\n")}\n\t</dict>\n</plist>\n`,
+  );
+  if (next === xml) {
+    console.warn("Could not patch ios/App/App/Info.plist — unexpected plist format.");
+    process.exit(1);
+  }
+  xml = next;
 }
-writeFileSync(plistPath, next);
-console.log("Patched ios/App/App/Info.plist with privacy usage strings.");
+
+writeFileSync(plistPath, xml);
+
+const pbxprojPath = resolve("ios/App/App.xcodeproj/project.pbxproj");
+if (existsSync(pbxprojPath)) {
+  const pbxproj = readFileSync(pbxprojPath, "utf8").replace(
+    /PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/g,
+    `PRODUCT_BUNDLE_IDENTIFIER = ${appId};`,
+  );
+  writeFileSync(pbxprojPath, pbxproj);
+}
+
+console.log(`Patched iOS identity ${appName} (${appId}).`);
